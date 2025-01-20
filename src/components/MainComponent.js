@@ -44,11 +44,11 @@ const MainComponent = () => {
 
   const subjects = [
     'Mathematics',
-    'Physics',
-    'Chemistry',
-    'Biology',
-    'Computer Science',
-    'Language Arts',
+    'Deep Learning',
+    'Machine Learning',
+    'UI & UI',
+    'Data Analysis',
+    'Generative AI',
   ];
 
   const handleOpenModal = (content) => {
@@ -73,8 +73,8 @@ const MainComponent = () => {
             {menuOpen ? <X className="hamburger-icon" /> : <Menu className="hamburger-icon" />}
           </button>
           <div className={`nav-links ${menuOpen ? 'open' : ''}`}>
-            <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
-            <a href="#subjects" onClick={() => setMenuOpen(false)}>Subjects</a>
+            <a href="#features" onClick={() => setMenuOpen(false)}>Courses</a>
+            <a href="#subjects" onClick={() => setMenuOpen(false)}>Exercises</a>
             <button
               className="btn btn-outline"
               onClick={() => {
