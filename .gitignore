@@ -23,3 +23,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vercel
+# Ignore build files
+build/
+node_modules/
+.vercel/
+
+# Ignore IDE or editor files
+.vscode/
+.idea/
+.DS_Store
