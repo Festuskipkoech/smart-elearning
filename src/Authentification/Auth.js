@@ -27,13 +27,13 @@ const Auth = ({ isLogin }) => {
             id="password"
             type="password"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder="Enter your password"
+            placeholder="Enter your password..."
             required
           />
         </div>
         <button
           type="submit"
-          className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500"
+          className="w-full bg-green-800 text-white py-2 px-4 rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-indigo-500"
         >
           {isLogin ? 'Log In' : 'Sign Up'}
         </button>

@@ -524,8 +524,8 @@
 
 .btn-outline {
   background: transparent;
-  border: 1px solid var(--gray-600);
-  color: var(--gray-600);
+  border: 1px solid var(--primary-dark);
+  color: var(--primary-dark);
 }
 
 .btn-outline:hover {

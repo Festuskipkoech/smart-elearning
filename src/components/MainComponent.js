@@ -46,7 +46,7 @@ const MainComponent = () => {
     'Mathematics',
     'Deep Learning',
     'Machine Learning',
-    'UI & UI',
+    'UI & UX',
     'Data Analysis',
     'Generative AI',
   ];
