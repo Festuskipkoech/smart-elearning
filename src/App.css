@@ -30,9 +30,10 @@
 
 /* styles.css */
 :root {
-  --primary-color: #2563eb;
-  --primary-dark: #1d4ed8;
+  --primary-color: #074407cc; /* Green */
+  --primary-dark: #16a34a; /* Dark Green */
   --white: #ffffff;
+  --black: #000000;
   --gray-50: #f9fafb;
   --gray-100: #f3f4f6;
   --gray-600: #4b5563;
