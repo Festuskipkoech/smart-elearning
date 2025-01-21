@@ -622,7 +622,7 @@
 }
 /* Add these styles to your existing CSS file */
 
-/* ChatBot Styles */
+/* ChatBot Styles *//* Toggle Button */
 .chat-toggle {
   position: fixed;
   bottom: 2rem;
@@ -646,6 +646,7 @@
   transform: scale(1.05);
 }
 
+/* Chat Window */
 .chat-window {
   position: fixed;
   bottom: 6rem;
@@ -661,6 +662,24 @@
   overflow: hidden;
 }
 
+/* For Desktop: Full Screen */
+@media (min-width: 1024px) {
+  .chat-window {
+    width: 100vw;
+    height: 100vh;
+    bottom: 0;
+    right: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .chat-toggle {
+    bottom: 3rem;
+    right: 3rem;
+  }
+}
+
+/* Chat Header */
 .chat-header {
   padding: 1rem;
   background-color: var(--primary-color);
@@ -679,6 +698,7 @@
   opacity: 0.9;
 }
 
+/* Chat Messages */
 .chat-messages {
   flex: 1;
   padding: 1rem;
@@ -689,8 +709,9 @@
   background-color: #f8f9fa;
 }
 
+/* Message Style */
 .message {
-  max-width: 80%;
+  max-width: 100%;
   padding: 0.75rem 1rem;
   border-radius: 1rem;
   line-height: 1.4;
@@ -722,6 +743,7 @@
   border-bottom-right-radius: 0.25rem;
 }
 
+/* Loading Dots */
 .loading-dots::after {
   content: '...';
   animation: loading 1.5s infinite;
@@ -733,6 +755,7 @@
   80%, 100% { content: '...'; }
 }
 
+/* Chat Input */
 .chat-input {
   padding: 1rem;
   border-top: 1px solid #eee;
@@ -793,4 +816,34 @@
     bottom: 1rem;
     right: 1rem;
   }
+}
+.message.bot {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.message.bot h1 {
+  font-size: 1.5em;
+  margin: 1em 0 0.5em 0;
+  font-weight: bold;
+}
+
+.message.bot h2 {
+  font-size: 1.25em;
+  margin: 1em 0 0.5em 0;
+  font-weight: bold;
+}
+
+.message.bot ul,
+.message.bot ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.message.bot strong {
+  font-weight: bold;
+}
+
+.message.bot p {
+  margin: 0.5em 0;
 }
