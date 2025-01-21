@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Auth from '../Authentification/Auth';
 import Modal from '../Authentification/Modal';
+import Chatbot from '../AI/Chatbot';
 
 const MainComponent = () => {
   const [isModalOpen, setModalOpen] = useState(false);
@@ -102,8 +103,7 @@ const MainComponent = () => {
         {modalContent}
       </Modal>
 
-      {/* Rest of the content */}
-      {/* Hero Section */}
+      {/* Hero SectionS */}
       <section className="hero">
         <div className="container">
           <h1 className="hero-title">
@@ -214,6 +214,7 @@ const MainComponent = () => {
           </div>
         </div>
       </footer>
+      <Chatbot/>
     </div>
   );
 };
