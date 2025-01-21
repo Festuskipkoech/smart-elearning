@@ -225,6 +225,9 @@ const FormattedMessage = ({ content }) => {
   
     const handleResponse = async (userInput) => {
       try {
+        if (userInput.toLowerCase().includes("who made you")) {
+          return "I was created by Festus, from Martial School of IT.";
+        }
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const result = await model.generateContent(userInput);
         const response = await result.response;
