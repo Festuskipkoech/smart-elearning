@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MessageCircle, Send, X } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import {API_KEY} from "../../api.js"
+import {API_KEY} from "../api.js"
 
 // Initialize the Gemini model with API key from environment variables
 const genAI = new GoogleGenerativeAI(API_KEY);
