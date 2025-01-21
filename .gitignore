@@ -27,7 +27,7 @@ yarn-error.log*
 build/
 node_modules/
 .vercel/
-.api.js
+src/api.js/
 
 # Ignore IDE or editor files
 .vscode/
