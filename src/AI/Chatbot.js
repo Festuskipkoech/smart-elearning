@@ -208,167 +208,129 @@ const FormattedMessage = ({ content }) => {
   
 
 
-export default function Chatbot() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      type: "bot",
-      content: "Hi, I'm your AI assistant, made by Martial School of IT. How can I help you?",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-  const handleResponse = async (userInput) => {
-    try {
-      const lowerInput = userInput.toLowerCase();
+  export default function Chatbot() {
+    const [messages, setMessages] = useState([
+      {
+        type: "bot",
+        content: "Hi, I'm your AI assistant. How can I help you?",
+      },
+    ]);
+    const [input, setInput] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const messagesRef = useRef(null);
   
-      // Check for common greetings
-      const greetings = ["hello", "hi", "hey"];
-      if (greetings.some((greet) => lowerInput.includes(greet))) {
-        const friendlyGreetings = [
-          "Hi there! 😊 How can I assist you today?",
-          "Hello! 👋 What can I help you with?",
-          "Hey! 👋 How's your day going?",
-        ];
-        return friendlyGreetings[Math.floor(Math.random() * friendlyGreetings.length)];
+    useEffect(() => {
+      messagesRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+  
+    const handleResponse = async (userInput) => {
+      try {
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const result = await model.generateContent(userInput);
+        const response = await result.response;
+        return response.text();
+      } catch (error) {
+        console.error("Error with Gemini API:", error);
+        return "I encountered an error. Please try again.";
       }
+    };
   
-      // Check for specific questions
-      if (lowerInput.includes("who made you")) {
-        return "I was created by Festus, from Martial School of IT.";
+    const handleSend = async () => {
+      if (!input.trim() || isLoading) return;
+  
+      const userMessage = input.trim();
+      setMessages(prev => [...prev, { type: "user", content: userMessage }]);
+      setInput("");
+      setIsLoading(true);
+  
+      try {
+        const response = await handleResponse(userMessage);
+        setMessages(prev => [...prev, { type: "bot", content: response }]);
+      } catch (error) {
+        console.error("Error:", error);
+        setMessages(prev => [
+          ...prev,
+          { type: "bot", content: "Sorry, I encountered an error. Please try again." },
+        ]);
+      } finally {
+        setIsLoading(false);
       }
+    };
   
-      // Handle general queries using the Gemini API
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-      
-      // Enhanced prompt to encourage better formatting
-      const prompt = `
-        You are a friendly and helpful study assistant. Please provide a clear, well-structured response to this question: ${userInput}
-        
-        Format your response using these guidelines:
-        - Use "# " for main headings and "## " for subheadings
-        - Organize complex information into clear paragraphs
-        - Use "-" for bullet points when listing items
-        - Use "1." for numbered lists when sequence matters
-        - Add empty lines between sections for better readability
-        - Bold important terms using **term**
-        - If providing examples, label them clearly
-        
-        Keep the response concise but informative.
-      `;
-      
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-  
-      // Process and format the response
-      return response.text()
-        .split('\n')
-        .map(line => {
-          // Preserve markdown headings
-          if (line.startsWith('# ')) return `\n${line}\n`;
-          if (line.startsWith('## ')) return `\n${line}\n`;
-          
-          // Format bullet points with proper spacing
-          if (line.trim().startsWith('- ')) {
-            return `\n${line.trim()}`;
-          }
-          
-          // Format numbered lists with proper spacing
-          if (/^\d+\.\s/.test(line.trim())) {
-            return `\n${line.trim()}`;
-          }
-          
-          // Preserve bold text
-          return line.trim();
-        })
-        .filter(line => line) // Remove empty lines
-        .join('\n');
-    } catch (error) {
-      console.error("Error with Gemini API:", error);
-      return "Oops! Something went wrong. Can you try again?";
-    }
-  };
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-
-    setMessages((prev) => [...prev, { type: "user", content: input.trim() }]);
-    const userMessage = input.trim();
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      const response = await handleResponse(userMessage);
-      setMessages((prev) => [...prev, { type: "bot", content: response }]);
-    } catch (error) {
-      console.error("Error:", error);
-      setMessages((prev) => [
-        ...prev,
-        { type: "bot", content: "Sorry, I encountered an error. Please try again." },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <button
-        className="chat-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Toggle Chat"
-      >
-        {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
-      </button>
-      {isOpen && (
-        <div className="chat-window">
-          <div className="chat-header">
-            <h3>AI Student Assistant</h3>
-            <p className="chat-subtitle">Made by MSI</p>
-          </div>
-          <div className="chat-messages">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`message ${message.type === "bot" ? "bot" : "user"}`}
-              >
-                {message.type === "bot" ? (
-                  <FormattedMessage content={message.content} />
-                ) : (
-                  <span className="text-gray-800">{message.content}</span>
-                )}
-              </div>
-            ))}
-            {isLoading && (
-              <div className="message bot loading">
-                <span className="loading-dots">Thinking...</span>
-              </div>
-            )}
-            <div ref={messagesRef} />
-          </div>
-          <div className="chat-input">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="Type your question"
-              disabled={isLoading}
-            />
-            <button onClick={handleSend} disabled={isLoading || !input.trim()}>
-              <Send size={20} />
-            </button>
+    return (
+      <div className="flex h-screen bg-gray-100">
+        {/* Sidebar */}
+        <div className="hidden md:flex md:w-64 bg-gray-900 p-4 flex-col">
+          <button className="text-white bg-gray-800 rounded-lg p-3 flex items-center gap-2 w-full hover:bg-gray-700 transition-colors">
+            <MessageCircle size={20} />
+            <span>New Chat</span>
+          </button>
+          <div className="mt-4 flex-1 overflow-y-auto">
+            {/* Chat history could go here */}
           </div>
         </div>
-      )}
-    </>
-  );
-}
+  
+        {/* Main chat area */}
+        <div className="flex-1 flex flex-col">
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+            <div className="max-w-3xl mx-auto">
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`mb-6 ${
+                    message.type === "bot" ? "mr-12" : "ml-12"
+                  }`}
+                >
+                  <div
+                    className={`rounded-2xl p-4 ${
+                      message.type === "bot"
+                        ? "bg-white shadow-sm"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {message.type === "bot" ? (
+                      <FormattedMessage content={message.content} />
+                    ) : (
+                      <span>{message.content}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="mb-6 mr-12">
+                  <div className="rounded-2xl p-4 bg-white shadow-sm">
+                    <span className="text-gray-600">Thinking...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesRef} />
+            </div>
+          </div>
+  
+          {/* Input area */}
+          <div className="border-t bg-white p-4 md:p-6">
+            <div className="max-w-3xl mx-auto relative">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                placeholder="Message..."
+                className="w-full p-4 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
+                disabled={isLoading}
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-black disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  

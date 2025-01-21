@@ -13,6 +13,10 @@ import Modal from '../Authentification/Modal';
 import Chatbot from '../AI/Chatbot';
 
 const MainComponent = () => {
+
+  const openChatbot = () => {
+    window.open('/chatbot', '_self');
+  };
   const [isModalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false); // State for mobile menu toggle
@@ -214,7 +218,14 @@ const MainComponent = () => {
           </div>
         </div>
       </footer>
-      <Chatbot/>
+      <button
+        className="chat-toggle"
+        onClick={openChatbot}
+        aria-label="Open Chatbot"
+      >
+        <MessageCircle size={30} />
+      </button>
+
     </div>
   );
 };

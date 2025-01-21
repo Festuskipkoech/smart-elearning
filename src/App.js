@@ -1,17 +1,17 @@
-import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainComponent from './components/MainComponent';
-import Navbar from './components/Navbar';
-import Side from './components/Side';
+import Chatbot from './AI/Chatbot';
 import './App.css';
 
-export default function App() {
+function App() {
   return (
-    <div className="app-container">
-      {/* <Side /> */}
-      <div className="main-content">
-        {/* <Navbar /> */}
-        <MainComponent />
-      </div>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<MainComponent />} />
+        <Route path="/chatbot" element={<Chatbot />} />
+      </Routes>
+    </Router>
   );
 }
+
+export default App;
