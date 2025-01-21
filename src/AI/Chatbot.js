@@ -28,32 +28,45 @@ export default function Chatbot() {
 
   const handleResponse = async (userInput) => {
     try {
-      if (userInput.toLowerCase().includes("who made you")) {
+      const lowerInput = userInput.toLowerCase();
+  
+      // Check for common greetings
+      const greetings = ["hello", "hi", "hey"];
+      if (greetings.some((greet) => lowerInput.includes(greet))) {
+        const friendlyGreetings = [
+          "Hi there! 😊 How can I assist you today?",
+          "Hello! 👋 What can I help you with?",
+          "Hey! 👋 How’s your day going?",
+        ];
+        return friendlyGreetings[Math.floor(Math.random() * friendlyGreetings.length)];
+      }
+  
+      // Check for specific questions
+      if (lowerInput.includes("who made you")) {
         return "I was created by Festus, from Martial School of IT.";
       }
   
+      // Handle general queries using the Gemini API
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-      const prompt = `You are a helpful study assistant. Please help with this question: ${userInput}. Keep your response clear and well-structured, but avoid using markdown symbols like **, *, or -.`;
+      const prompt = `You are a friendly and helpful study assistant. Please provide a clear response to this question: ${userInput}`;
       const result = await model.generateContent(prompt);
       const response = await result.response;
-      
-      // Format the response text while maintaining structure
-      let formattedText = response.text()
-        .replace(/\*\*/g, '')  // Remove bold
-        .replace(/\*/g, '')    // Remove italics
-        .replace(/`/g, '')     // Remove code formatting
-        .replace(/^\s*[-•]\s*/gm, '• ') // Standardize bullet points
-        .split('\n')           // Split into lines
-        .map(line => line.trim()) // Trim each line
-        .filter(line => line)  // Remove empty lines
-        .join('\n');          // Rejoin with newlines
   
-      return formattedText;
+      return response.text()
+        .replace(/\*\*/g, '') // Remove markdown symbols
+        .replace(/\*/g, '')
+        .replace(/`/g, '')
+        .replace(/^\s*[-•]\s*/gm, '• ')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line)
+        .join('\n');
     } catch (error) {
       console.error("Error with Gemini API:", error);
-      throw error;
+      return "Oops! Something went wrong. Can you try again?";
     }
   };
+  
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
