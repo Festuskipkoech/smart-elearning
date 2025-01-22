@@ -213,7 +213,7 @@ export default function Chatbot() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-10 font-lato">
+    <div className="md:flex sm:flex-grow h-screen bg-slate-10 font-lato">
       <button
         onClick={toggleMobileMenu}
         className="md:hidden fixed top-4 right-4 z-50 p-2 bg-gray-900 text-white rounded-lg"
@@ -275,7 +275,7 @@ export default function Chatbot() {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col">
-        <div className="flex-1 overflow-y-auto px-2 md:px-4 py-6 md:py-8">
+        <div className="flex-1 sm:overflow-y-auto sm:p-2 px-2 md:px-4 py-6 md:py-8">
           <div className="max-w-3xl mx-auto">
             {messages.map((message) => (
               <div
@@ -316,7 +316,7 @@ export default function Chatbot() {
         </div>
 
         {/* Input area */}
-        <div className="border-t bg-white p-2 md:p-4">
+        <div className="sm:sticky sm:bottom-0 border-t bg-white p-2 md:p-4">
           <div className="max-w-3xl mx-auto relative">
             <input
               ref={inputRef}
