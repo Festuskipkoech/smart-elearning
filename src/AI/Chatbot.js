@@ -275,7 +275,7 @@ export default function Chatbot() {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col">
-        <div className="flex-1 sm:overflow-y-auto sm:p-2 px-2 md:px-4 py-6 md:py-8">
+        <div className="flex-1 sm:overflow-y-auto sm:px-2 md:px-4 py-6 md:py-8">
           <div className="max-w-3xl mx-auto">
             {messages.map((message) => (
               <div

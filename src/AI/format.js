@@ -1,29 +1,27 @@
 import React from 'react';
 
 export const FormattedMessage = ({ content }) => {
-  // Enhanced helper function to process inline formatting
   const formatInlineText = (text) => {
-    // Skip processing if the text already contains HTML tags
     if (text.includes('<span') || text.includes('<code>')) {
       return text;
     }
 
     return text
-      // Handle bold with double asterisks
-      .replace(/\*\*\*(.*?)\*\*\*/g, '<span class="font-bold italic">$1</span>')
-      .replace(/\*\*(.*?)\*\*/g, '<span class="font-bold">$1</span>')
-      // Handle italic with single asterisk
-      .replace(/\*((?!\*)[^*]+)\*/g, '<span class="italic">$1</span>')
-      // Handle code blocks
-      .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded font-mono text-sm">$1</code>');
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<span class="font-bold italic">$1</span>')
+    .replace(/\*\*(.*?)\*\*/g, '<span class="font-bold">$1</span>')
+    // Handle italic with single asterisk
+    .replace(/\*((?!\*)[^*]+)\*/g, '<span class="italic">$1</span>')
+    // Handle code blocks
+    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded font-mono text-sm">$1</code>');
   };
 
   const formatContent = (text) => {
-    // Normalize line endings and split into sections
     const sections = text.split('\n').map(line => line.replace(/\r$/, ''));
     const formattedSections = [];
     let currentSection = null;
     let listLevel = 0;
+    let inCodeBlock = false;
+    let codeLanguage = '';
 
     const closeCurrentSection = (index) => {
       if (!currentSection) return;
@@ -44,7 +42,9 @@ export const FormattedMessage = ({ content }) => {
             key={`code-${index}`}
             className="bg-gray-50 p-4 rounded-lg my-3 font-mono text-sm overflow-x-auto border border-gray-200"
           >
-            <code>{currentSection.content.join('\n')}</code>
+            <code className={codeLanguage ? `language-${codeLanguage}` : ''}>
+              {currentSection.content.join('\n')}
+            </code>
           </pre>
         );
       }
@@ -53,8 +53,30 @@ export const FormattedMessage = ({ content }) => {
 
     sections.forEach((line, index) => {
       const trimmedLine = line.replace(/\s+$/, '');
+      const indentMatch = line.match(/^(\s*)/);
+      const indentSize = indentMatch ? indentMatch[1].length : 0;
 
-      // Handle different section types
+      // Handle code blocks with language specification
+      if (trimmedLine.match(/^```(\w*)$/)) {
+        if (!inCodeBlock) {
+          closeCurrentSection(index);
+          inCodeBlock = true;
+          codeLanguage = trimmedLine.match(/^```(\w*)$/)[1];
+          currentSection = { type: 'code', content: [] };
+        } else {
+          inCodeBlock = false;
+          closeCurrentSection(index);
+          codeLanguage = '';
+        }
+        return;
+      }
+
+      if (inCodeBlock && currentSection?.type === 'code') {
+        currentSection.content.push(line);
+        return;
+      }
+
+      // Handle headings
       if (trimmedLine.match(/^#\s+[^#]/)) {
         closeCurrentSection(index);
         formattedSections.push(
@@ -93,7 +115,7 @@ export const FormattedMessage = ({ content }) => {
       }
       // Enhanced unordered list handling
       else if (trimmedLine.match(/^\s*[\*\-•]\s/)) {
-        const nestLevel = (trimmedLine.match(/^\s*/) || [''])[0].length / 2;
+        const nestLevel = Math.floor(indentSize / 2);
         
         if (!currentSection || currentSection.type !== 'unordered-list' || listLevel !== nestLevel) {
           closeCurrentSection(index);
@@ -110,18 +132,22 @@ export const FormattedMessage = ({ content }) => {
         currentSection.items.push(
           <li
             key={`ul-${index}`}
-            className={`mb-2 text-gray-700 leading-relaxed ${
+            className={`mb-2 text-gray-700 leading-relaxed flex items-start ${
               nestLevel > 0 ? `ml-${nestLevel * 4}` : ''
             }`}
-            dangerouslySetInnerHTML={{
-              __html: formatInlineText(listItemContent)
-            }}
-          />
+          >
+            <span className="mr-2">•</span>
+            <span
+              dangerouslySetInnerHTML={{
+                __html: formatInlineText(listItemContent)
+              }}
+            />
+          </li>
         );
       }
-      // Ordered list items (preserved from original)
+      // Enhanced ordered list handling
       else if (trimmedLine.match(/^\s*\d+\.\s/)) {
-        const nestLevel = (trimmedLine.match(/^\s*/) || [''])[0].length / 2;
+        const nestLevel = Math.floor(indentSize / 2);
         
         if (!currentSection || currentSection.type !== 'ordered-list' || listLevel !== nestLevel) {
           closeCurrentSection(index);
@@ -134,36 +160,29 @@ export const FormattedMessage = ({ content }) => {
           listLevel = nestLevel;
         }
 
+        const listItemContent = trimmedLine.replace(/^\s*\d+\.\s/, '');
+        const itemNumber = currentSection.items.length + 1;
         currentSection.items.push(
           <li
             key={`ol-${index}`}
-            className={`mb-2 text-gray-700 ${
+            className={`mb-2 text-gray-700 flex items-start ${
               nestLevel > 0 ? `ml-${nestLevel * 4}` : ''
             }`}
-            dangerouslySetInnerHTML={{
-              __html: formatInlineText(trimmedLine.replace(/^\s*\d+\.\s/, ''))
-            }}
-          />
+          >
+            <span className="mr-2">{itemNumber}.</span>
+            <span
+              dangerouslySetInnerHTML={{
+                __html: formatInlineText(listItemContent)
+              }}
+            />
+          </li>
         );
-      }
-      // Code blocks
-      else if (trimmedLine.startsWith('```')) {
-        if (!currentSection || currentSection.type !== 'code') {
-          closeCurrentSection(index);
-          currentSection = { type: 'code', content: [] };
-        } else {
-          closeCurrentSection(index);
-        }
-      }
-      else if (currentSection?.type === 'code') {
-        currentSection.content.push(trimmedLine);
       }
       // Regular paragraphs
       else if (trimmedLine.trim()) {
         if (!currentSection || currentSection.type !== 'paragraph') {
           closeCurrentSection(index);
           currentSection = { type: 'paragraph', content: [] };
-          formattedSections.push(currentSection);
         }
         currentSection.content.push(trimmedLine);
       }
@@ -187,7 +206,7 @@ export const FormattedMessage = ({ content }) => {
         return (
           <ul
             key={`ul-${index}`}
-            className="my-4 pl-6 list-disc list-outside space-y-2"
+            className="my-4 pl-6 list-none space-y-2"
           >
             {section.items}
           </ul>
@@ -197,13 +216,13 @@ export const FormattedMessage = ({ content }) => {
         return (
           <ol
             key={`ol-${index}`}
-            className="my-4 pl-6 list-decimal list-outside space-y-2"
+            className="my-4 pl-6 list-none space-y-2"
           >
             {section.items}
           </ol>
         );
       }
-      return null; // Handle any unexpected section types
+      return null;
     });
   };
 

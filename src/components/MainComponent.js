@@ -17,6 +17,9 @@ const MainComponent = () => {
   const openChatbot = () => {
     window.open('/chatbot', '_self');
   };
+  const openQuiz = () => {
+    window.open('/quiz', '_self');
+  };
   const [isModalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false); // State for mobile menu toggle
@@ -79,7 +82,7 @@ const MainComponent = () => {
           </button>
           <div className={`nav-links ${menuOpen ? 'open' : ''}`}>
             <a href="#features" onClick={() => setMenuOpen(false)}>Courses</a>
-            <a href="#subjects" onClick={() => setMenuOpen(false)}>Exercises</a>
+            <a href="#subjects" onClick={openQuiz}>Exercises</a>
             <button
               className="btn btn-outline"
               onClick={() => {
