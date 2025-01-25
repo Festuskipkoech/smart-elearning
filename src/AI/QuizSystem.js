@@ -34,7 +34,7 @@ const QuizSystem = ({ studentId }) => {
   const generateQuiz = async () => {
     setLoading(true);
     try {
-      const quizResponse = await axios.post('http://192.168.100.219:8000/generate-quiz', {
+      const quizResponse = await axios.post('http://192.168.100.120:8000/generate-quiz', {
         student_id: studentId,
         topic: selectedTopic,
         difficulty: 'hard',
