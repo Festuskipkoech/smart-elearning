@@ -1,206 +1,237 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, ArrowRight, Check, X } from 'lucide-react';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
-import axios from 'axios';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const QuizSystem = ({ studentId }) => {
-  const [questions, setQuestions] = useState([]);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [score, setScore] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [answers, setAnswers] = useState({});
-  const [difficulty, setDifficulty] = useState('medium');
-  const [selectedTopic, setSelectedTopic] = useState(null);
-  const [isTopicModalOpen, setIsTopicModalOpen] = useState(true);
+const QuizSystem = () => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [studentProgress, setStudentProgress] = useState({
+    completedSubtopics: 0,
+    totalSubtopics: 0,
+    currentTopic: '',
+    quizEligible: false,
+    exerciseEligible: false,
+    projectEligible: false
+  });
+  const [showRedirectPopup, setShowRedirectPopup] = useState(false);
+  const [redirectType, setRedirectType] = useState(null);
+  const navigate = useNavigate();
 
-  // Predefined list of topics
-  const availableTopics = [
-    'Machine Learning',
-    'Deep Learning',
-    'Node JS',
-    'Generative Ai',
-    'RAG Apps',
-    'AI agents'
-  ];
-
+  // Fetch student progress from backend
   useEffect(() => {
-    if (selectedTopic) {
-      generateQuiz();
-    }
-  }, [selectedTopic]);
-
-  const generateQuiz = async () => {
-    setLoading(true);
-    try {
-      const quizResponse = await axios.post('http://192.168.100.120:8000/generate-quiz', {
-        student_id: studentId,
-        topic: selectedTopic,
-        difficulty: 'hard',
-        numQuestions: 5
-      });
-      setQuestions(quizResponse.data.questions);
-
-      if (quizResponse.data.questions || quizResponse.data.questions.length > 0) {
-        setQuestions(quizResponse.data.questions);
-      } else {
-        console.error("No questions returned");
+    const fetchProgress = async () => {
+      try {
+        const response = await fetch('/api/student/progress');
+        const data = await response.json();
+        setStudentProgress(data);
+        checkAndShowRedirect(data);
+      } catch (error) {
+        console.error('Error fetching progress:', error);
       }
-      setLoading(false);
-    } catch (error) {
-      console.error('Quiz generation failed:', error);
-      setLoading(false);
+    };
+    fetchProgress();
+  }, []);
+
+  const checkAndShowRedirect = (progress) => {
+    if (progress.quizEligible && progress.completedSubtopics % 4 === 0) {
+      setRedirectType('quiz');
+      setShowRedirectPopup(true);
+    } else if (progress.exerciseEligible && progress.completedSubtopics % 3 === 0) {
+      setRedirectType('exercise');
+      setShowRedirectPopup(true);
+    } else if (progress.projectEligible && 
+              (progress.completedSubtopics === progress.totalSubtopics / 2 || 
+               progress.completedSubtopics === progress.totalSubtopics)) {
+      setRedirectType('project');
+      setShowRedirectPopup(true);
     }
   };
 
-  const handleTopicSelect = (topic) => {
-    setSelectedTopic(topic);
-    setIsTopicModalOpen(false);
+  const handleRedirect = () => {
+    setShowRedirectPopup(false);
+    navigate(`/assessments/${redirectType}`);
   };
 
-  const handleAnswer = (questionId, answer) => {
-    setAnswers({
-      ...answers,
-      [questionId]: answer
-    });
-  };
-
-  const submitQuiz = async () => {
-    try {
-      const response = await axios.post('http://localhost:8000/submit-quiz', {
-        student_id: studentId,
-        topic: selectedTopic,
-        answers
-      });
-      setScore(response.data.score);
-    } catch (error) {
-      console.error('Failed to submit quiz:', error);
+  const handleSlide = (direction) => {
+    if (direction === 'next') {
+      setCurrentSlide((prev) => (prev + 1) % 3);
+    } else {
+      setCurrentSlide((prev) => (prev - 1 + 3) % 3);
     }
   };
-
-  // Topic Selection Modal
-  const TopicSelectionModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-2xl transform transition-all duration-300 scale-95 hover:scale-100">
-        <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Select a Topic to Study</h2>
-        <div className="grid grid-cols-2 gap-4">
-          {availableTopics.map((topic) => (
-            <button
-              key={topic}
-              onClick={() => handleTopicSelect(topic)}
-              className="p-4 bg-gradient-to-r from-green-400 to-blue-400 hover:from-green-500 hover:to-blue-500 rounded-lg text-center font-medium text-white transition-all duration-300 transform hover:scale-105"
-            >
-              {topic}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   return (
-    <div className="quiz-container max-w-3xl mx-auto p-4 relative">
-      {/* Topic Selection Modal */}
-      {isTopicModalOpen && <TopicSelectionModal />}
-
-      {selectedTopic && (
-        <>
-          {/* Quiz Card */}
-          <Card className="mb-6 shadow-lg rounded-xl overflow-hidden">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  {selectedTopic} Quiz (Difficulty: {difficulty})
-                </h2>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Generating personalized questions...</p>
-                </div>
-              ) : (
-                <>
-                  {questions.map((question, index) => (
-                    <div
-                      key={index}
-                      className={`p-6 rounded-xl mb-4 transition-all duration-300 ${
-                        currentQuestion === index ? 'bg-gradient-to-r from-green-50 to-blue-50 shadow-md' : 'bg-gray-50'
-                      }`}
-                    >
-                      <p className="font-medium mb-4 text-gray-700">{question.text}</p>
-                      <div className="grid gap-3">
-                        {question.options.map((option, optIndex) => (
-                          <button
-                            key={optIndex}
-                            onClick={() => handleAnswer(question.id, option)}
-                            className={`p-3 rounded-lg text-left transition-all duration-200 ${
-                              answers[question.id] === option
-                                ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg'
-                                : 'bg-white hover:bg-green-50 hover:shadow-md'
-                            }`}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-between mt-6">
-                    <button
-                      onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
-                      className="btn btn-outline bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg transition-all duration-200"
-                      disabled={currentQuestion === 0}
-                    >
-                      Previous
-                    </button>
-                    {currentQuestion === questions.length - 1 ? (
-                      <button
-                        onClick={submitQuiz}
-                        className="btn btn-primary bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-6 py-2 rounded-lg transition-all duration-200"
-                      >
-                        Submit Quiz
-                        <Check className="ml-2 w-4 h-4" />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setCurrentQuestion(currentQuestion + 1)}
-                        className="btn btn-primary bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-6 py-2 rounded-lg transition-all duration-200"
-                      >
-                        Next
-                        <ArrowRight className="ml-2 w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quiz Results */}
-          {score !== 0 && (
-            <Card className="shadow-lg rounded-xl overflow-hidden">
-              <CardContent className="text-center py-8">
-                <h3 className="text-2xl font-bold mb-4 text-gray-800">Quiz Results</h3>
-                <p className="text-4xl font-bold text-green-600 mb-6">{score}%</p>
-                <button
-                  onClick={() => {
-                    setIsTopicModalOpen(true);
-                    setScore(0);
-                    setQuestions([]);
-                    setAnswers({});
-                  }}
-                  className="btn btn-primary bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-6 py-2 rounded-lg transition-all duration-200"
-                >
-                  Choose New Topic
-                </button>
-              </CardContent>
-            </Card>
-          )}
-        </>
+    <div className="min-h-screen bg-white">
+      {/* Redirect Popup */}
+      {showRedirectPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-green-700 capitalize">
+                {redirectType} Available
+              </h3>
+              <button 
+                onClick={() => setShowRedirectPopup(false)}
+                className="text-black hover:text-green-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="mb-6 p-4 bg-green-50 rounded-lg">
+              <p className="text-black mb-2">
+                You've completed {studentProgress.completedSubtopics} subtopics!
+              </p>
+              <p className="text-green-700">
+                {redirectType === 'quiz' && "It's time to test your knowledge with a quiz."}
+                {redirectType === 'exercise' && "Ready for some hands-on practice?"}
+                {redirectType === 'project' && "Time to work on your project!"}
+              </p>
+            </div>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setShowRedirectPopup(false)}
+                className="px-4 py-2 text-black hover:text-green-700"
+              >
+                Later
+              </button>
+              <button
+                onClick={handleRedirect}
+                className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800"
+              >
+                Start Now
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Progress Header */}
+      <div className="bg-green-700 text-white py-4">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-bold">Learning Progress</h2>
+          <p className="mt-2">
+            Topic: {studentProgress.currentTopic}
+          </p>
+          <div className="mt-2 bg-green-600 rounded-full h-2">
+            <div 
+              className="bg-white rounded-full h-2 transition-all duration-300"
+              style={{ width: `${(studentProgress.completedSubtopics / studentProgress.totalSubtopics) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="border-b border-green-100">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex space-x-4">
+              {['Quiz', 'Exercise', 'Project'].map((tab, index) => (
+                <button
+                  key={tab}
+                  onClick={() => setCurrentSlide(index)}
+                  className={`py-4 px-6 font-medium transition-colors relative ${
+                    currentSlide === index
+                      ? 'text-green-700 border-b-2 border-green-700'
+                      : 'text-gray-500 hover:text-green-700'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleSlide('prev')}
+                className="p-2 rounded-full hover:bg-green-50"
+              >
+                <ChevronLeft className="w-6 h-6 text-green-700" />
+              </button>
+              <button
+                onClick={() => handleSlide('next')}
+                className="p-2 rounded-full hover:bg-green-50"
+              >
+                <ChevronRight className="w-6 h-6 text-green-700" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Slider */}
+      <div className="container mx-auto px-4 py-8">
+        <div 
+          className="transition-transform duration-300 flex"
+          style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+        >
+          {/* Quiz Section */}
+          <div className="w-full flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-bold text-green-700 mb-4">Quizzes</h3>
+              <p className="text-gray-600 mb-4">
+                Complete quizzes to test your knowledge after every 4 subtopics.
+              </p>
+              <div className="space-y-4">
+                {/* Quiz list or current quiz status */}
+                {studentProgress.quizEligible ? (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-green-700 font-medium">New quiz available!</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">
+                    Complete {4 - (studentProgress.completedSubtopics % 4)} more subtopics to unlock the next quiz.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Exercise Section */}
+          <div className="w-full flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-bold text-green-700 mb-4">Exercises</h3>
+              <p className="text-gray-600 mb-4">
+                Practice with hands-on exercises after every 3 subtopics.
+              </p>
+              <div className="space-y-4">
+                {studentProgress.exerciseEligible ? (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-green-700 font-medium">New exercise available!</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">
+                    Complete {3 - (studentProgress.completedSubtopics % 3)} more subtopics to unlock the next exercise.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Project Section */}
+          <div className="w-full flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-bold text-green-700 mb-4">Projects</h3>
+              <p className="text-gray-600 mb-4">
+                Apply your skills with comprehensive projects.
+              </p>
+              <div className="space-y-4">
+                {studentProgress.projectEligible ? (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-green-700 font-medium">
+                      {studentProgress.completedSubtopics === studentProgress.totalSubtopics
+                        ? 'Final project available!'
+                        : 'Midterm project available!'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">
+                    Complete more subtopics to unlock the next project.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

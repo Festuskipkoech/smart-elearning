@@ -1,43 +1,77 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, Menu, X, Trash2 } from "lucide-react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { API_KEY } from "../api.js";
+import {
+  Box,
+  Container,
+  TextField,
+  IconButton,
+  Typography,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  ListItemButton,
+  AppBar,
+  Toolbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+  Paper,
+  CircularProgress
+} from "@mui/material";
+import {
+  Send as SendIcon,
+  Menu as MenuIcon,
+  Close as CloseIcon,
+  Delete as DeleteIcon,
+  Chat as ChatIcon,
+  School as SchoolIcon,
+  Assignment as AssignmentIcon,
+  Build as BuildIcon,
+  QuestionAnswer as QuizIcon
+} from "@mui/icons-material";
+import { useTheme } from "@mui/material/styles";
 import { FormattedMessage } from "./format.js";
-
-const genAI = new GoogleGenerativeAI(API_KEY);
+import axios from "axios";
 
 export default function Chatbot() {
+  const theme = useTheme();
+  const token = localStorage.getItem('token');
+  // Chat states
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Chat history state
   const [chatHistory, setChatHistory] = useState(() => {
     const saved = localStorage.getItem('chatHistory');
     return saved ? JSON.parse(saved) : [];
   });
-  
-  // Current chat ID state
   const [currentChatId, setCurrentChatId] = useState(() => {
     const saved = localStorage.getItem('currentChatId');
     return saved || `chat-${Date.now()}`;
   });
-
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem(`messages-${currentChatId}`);
     return saved ? JSON.parse(saved) : [{
       type: "bot",
-      content: "Hello! I'm your AI assistant. How can I help you today?",
+      content: "Hi! I'm your AI tutor. What would you like to learn today?",
       id: "initial",
     }];
   });
-
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
-  const messagesRef = useRef(null);
+
+  // Assessment states
+  const [showAssessmentDialog, setShowAssessmentDialog] = useState(true);
+  const [assessmentType, setAssessmentType] = useState();
+  const [currentTopic, setCurrentTopic] = useState();
+  const [completedSubtopics, setCompletedSubtopics] = useState(0);
+
+  // Refs
+  const messagesEndRef = useRef(null);
   const responseIdRef = useRef(0);
   const inputRef = useRef(null);
-
-  // Save states to localStorage
+  // Effects
   useEffect(() => {
     localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
   }, [chatHistory]);
@@ -48,15 +82,15 @@ export default function Chatbot() {
 
   useEffect(() => {
     localStorage.setItem(`messages-${currentChatId}`, JSON.stringify(messages));
+    scrollToBottom();
   }, [messages, currentChatId]);
 
-  useEffect(() => {
-    messagesRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // Scroll handling
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
-  // Function to handle input blur and focus
   const handleInputFocus = () => {
-    // On mobile, scroll to bottom when input is focused
     if (window.innerWidth <= 768) {
       setTimeout(() => {
         window.scrollTo(0, document.body.scrollHeight);
@@ -64,25 +98,7 @@ export default function Chatbot() {
     }
   };
 
-  const handleInputBlur = () => {
-    // On mobile, blur input after sending message
-    if (window.innerWidth <= 768) {
-      inputRef.current?.blur();
-    }
-  };
-
-  // Handle keyboard events
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault(); // Prevent default to avoid unwanted line breaks
-      handleSend();
-    }
-  };
-
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(prev => !prev);
-  };
-
+  // Chat management functions
   const createNewChat = () => {
     const newChatId = `chat-${Date.now()}`;
     const newChat = {
@@ -95,14 +111,15 @@ export default function Chatbot() {
     setCurrentChatId(newChatId);
     setMessages([{
       type: "bot",
-      content: "Hello! I'm your AI assistant. How can I help you today?",
+      content: "Hello! I'm your AI tutor. What would you like to learn today?",
       id: "initial",
     }]);
+    setCompletedSubtopics(0);
+    setIsMobileMenuOpen(false);
   };
 
   const loadChat = (chatId) => {
     const savedMessages = localStorage.getItem(`messages-${chatId}`);
-    
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages));
       setCurrentChatId(chatId);
@@ -120,225 +137,365 @@ export default function Chatbot() {
     }
   };
 
-  const updateChatTitle = (chatId) => {
+  const updateChatTitle = (chatId, userInput) => {
     setChatHistory(prev => prev.map(chat => {
       if (chat.id === chatId) {
-        const messages = JSON.parse(localStorage.getItem(`messages-${chatId}`) || '[]');
-        const firstUserMessage = messages.find(m => m.type === 'user');
-        const title = firstUserMessage 
-          ? firstUserMessage.content.slice(0, 30) + (firstUserMessage.content.length > 30 ? '...' : '')
-          : 'New Chat';
+        const title = userInput.slice(0, 30) + (userInput.length > 30 ? '...' : '');
         return { ...chat, title };
       }
       return chat;
     }));
   };
 
-  const handleResponse = async (userInput) => {
-    try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-      
-      const response = await model.generateContentStream(userInput);
-      
-      let fullResponse = "";
-      const messageId = `response-${responseIdRef.current++}`;
-      
-      setMessages(prev => [...prev, { 
-        type: "bot", 
-        content: "", 
-        id: messageId,
-        isStreaming: true 
-      }]);
+  // Assessment handling
+// Update the checkAssessmentRequirements function
 
-      for await (const chunk of response.stream) {
-        const chunkText = chunk.text();
-        fullResponse += chunkText;
-        
-        setMessages(prev => prev.map(msg => 
-          msg.id === messageId 
-            ? { ...msg, content: fullResponse }
-            : msg
-        ));
-      }
 
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, isStreaming: false }
-          : msg
-      ));
-
-      // Update chat title after first user message
-      if (messages.length <= 2) {
-        updateChatTitle(currentChatId);
-      }
-
-      return fullResponse;
-    } catch (error) {
-      console.error("Error with Gemini API:", error);
-      return "I encountered an error. Please try again.";
-    }
+  const handleAssessmentStart = () => {
+    setShowAssessmentDialog(false);
+    window.location.href = `/${assessmentType}/${currentChatId}`;
+    
   };
 
+  // Message handling
+// In Chatbot.js - Update the API call
+
+const checkAssessmentRequirements = async (subtopicCount) => {
+  try {
+    // Ensure token exists
+    if (!token) {
+      console.error("No authentication token found");
+      return;
+    }
+
+    // Ensure subtopicCount is a valid number
+    const count = Math.max(0, parseInt(subtopicCount) || 0);
+
+    // Make the API call
+    const response = await axios.get(
+      `http://localhost:8000/api/check-requirements/${count}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const { quiz, exercise, project } = response.data;
+
+    // Update state based on response
+    if (quiz) {
+      setAssessmentType('quiz');
+      setShowAssessmentDialog(true);
+    } else if (exercise) {
+      setAssessmentType('exercise');
+      setShowAssessmentDialog(true);
+    } else if (project) {
+      setAssessmentType('project');
+      setShowAssessmentDialog(true);
+    }
+
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.error("Authentication token expired or invalid");
+      window.location.href = '/login';
+    } else if (error.response?.status === 404) {
+      console.error("API endpoint not found. Please check the URL and server status.");
+    } else {
+      console.error("Error checking assessment requirements:", error);
+    }
+  }
+};
+
+// Update the handleResponse function to properly track subtopics
+const handleResponse = async (userInput) => {
+  try {
+    const response = await axios.post("http://localhost:8000/api/generate-subtopics", {
+      topic: userInput
+    });
+
+    setCurrentTopic(userInput);
+    
+    // Show subtopics one by one with a delay
+    const subtopics = response.data.subtopics;
+    for (let i = 0; i < subtopics.length; i++) {
+      const subtopic = subtopics[i];
+      const messageId = `response-${responseIdRef.current++}`;
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setMessages(prev => [...prev, {
+        type: "bot",
+        content: `${i + 1}. ${subtopic.title}\n${subtopic.content}`,
+        id: messageId
+      }]);
+    }
+
+    // Update completed subtopics count and check requirements
+    const newCount = completedSubtopics + 1;
+    setCompletedSubtopics(newCount);
+    await checkAssessmentRequirements(newCount);
+
+  } catch (error) {
+    console.error("Error:", error);
+    throw new Error("Failed to generate response");
+  }
+};
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
-    const userMessage = input.trim();
-    const messageId = `user-${responseIdRef.current}`;
-    
-    // Blur input field immediately after sending
-    handleInputBlur();
-    
-    setMessages(prev => [...prev, { 
-      type: "user", 
-      content: userMessage,
-      id: messageId 
-    }]);
+    const userInput = input.trim();
     setInput("");
     setIsLoading(true);
 
     try {
-      await handleResponse(userMessage);
+      setMessages(prev => [...prev, {
+        type: "user",
+        content: userInput,
+        id: `user-${Date.now()}`
+      }]);
+
+      if (messages.length <= 2) {
+        updateChatTitle(currentChatId, userInput);
+      }
+
+      await handleResponse(userInput);
     } catch (error) {
-      console.error("Error:", error);
       setMessages(prev => [...prev, {
         type: "bot",
         content: "Sorry, I encountered an error. Please try again.",
-        id: `error-${responseIdRef.current}`
+        id: `error-${Date.now()}`
       }]);
     } finally {
       setIsLoading(false);
-      // Reset scroll position after response
-      messagesRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // Render functions
+  const renderAssessmentIcon = () => {
+    switch (assessmentType) {
+      case 'quiz':
+        return <QuizIcon />;
+      case 'exercise':
+        return <BuildIcon />;
+      case 'project':
+        return <AssignmentIcon />;
+      default:
+        return <SchoolIcon />;
+    }
+  };
+
+  const getAssessmentTitle = () => {
+    switch (assessmentType) {
+      case 'quiz':
+        return 'Quiz Available';
+      case 'exercise':
+        return 'Practice Exercise Available';
+      case 'project':
+        return 'Project Available';
+      default:
+        return 'Assessment Available';
+    }
+  };
+
+  const getAssessmentDescription = () => {
+    switch (assessmentType) {
+      case 'quiz':
+        return "You've completed enough topics to take a quiz. Ready to test your knowledge?";
+      case 'exercise':
+        return "Time for some hands-on practice! Ready to apply what you've learned?";
+      case 'project':
+        return "You've reached a milestone! Ready to work on a project?";
+      default:
+        return "Ready to check your progress?";
     }
   };
 
   return (
-    <div className="md:flex sm:flex-grow h-screen bg-slate-10 font-lato">
-      <button
-        onClick={toggleMobileMenu}
-        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-gray-900 text-white rounded-lg"
-      >
-        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+      {/* Mobile Menu Button */}
+      <AppBar position="fixed" sx={{ width: { sm: `calc(100% - 240px)` }, ml: { sm: '240px' } }}>
+        <Toolbar>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            sx={{ mr: 2, display: { sm: 'none' } }}
+          >
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6" noWrap component="div">
+            AI Tutor
+          </Typography>
+        </Toolbar>
+      </AppBar>
 
-      {/* Sidebar with Chat History */}
-      <div
-        className={`${
-          isMobileMenuOpen ? 'fixed inset-0 z-40' : 'hidden'
-        } md:relative md:flex md:w-64 bg-gray-900 p-4 flex-col transition-all duration-300 ease-in-out`}
+      {/* Sidebar */}
+      <Drawer
+        variant={window.innerWidth > 600 ? "permanent" : "temporary"}
+        open={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        sx={{
+          width: 240,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: 240,
+            boxSizing: 'border-box',
+          },
+        }}
       >
-        <div className="flex items-center gap-2 text-white mb-4">
-          <MessageCircle size={24} />
-          <span className="text-lg font-semibold">Chat Assistant</span>
-        </div>
-        
-        {/* New Chat Button */}
-        <button
-          onClick={() => {
-            createNewChat();
-            setIsMobileMenuOpen(false);
-          }}
-          className="text-white bg-black rounded-lg p-3 flex items-center gap-2 w-full hover:bg-black transition-colors mb-4"
-        >
-          <MessageCircle size={20} />
-          <span>New Chat</span>
-        </button>
-
-        {/* Chat History */}
-        <div className="flex-1 overflow-y-auto -mx-4 px-4">
-          <div className="space-y-2">
+        <Toolbar />
+        <Box sx={{ overflow: 'auto' }}>
+          <List>
+            <ListItem disablePadding>
+              <ListItemButton onClick={createNewChat}>
+                <ListItemIcon>
+                  <ChatIcon />
+                </ListItemIcon>
+                <ListItemText primary="New Chat" />
+              </ListItemButton>
+            </ListItem>
+          </List>
+          <List>
             {chatHistory.map((chat) => (
-              <div
+              <ListItem
                 key={chat.id}
-                onClick={() => loadChat(chat.id)}
-                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer ${
-                  currentChatId === chat.id
-                    ? "bg-gray-700 text-white"
-                    : "text-gray-300 hover:bg-gray-800"
-                }`}
+                disablePadding
+                secondaryAction={
+                  <IconButton edge="end" onClick={(e) => deleteChat(chat.id, e)}>
+                    <DeleteIcon />
+                  </IconButton>
+                }
               >
-                <div className="flex items-center gap-2 truncate">
-                  <MessageCircle size={16} />
-                  <span className="truncate">{chat.title}</span>
-                </div>
-                <button
-                  onClick={(e) => deleteChat(chat.id, e)}
-                  className="p-1 hover:text-red-500"
+                <ListItemButton
+                  selected={currentChatId === chat.id}
+                  onClick={() => loadChat(chat.id)}
                 >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  <ListItemIcon>
+                    <ChatIcon />
+                  </ListItemIcon>
+                  <ListItemText primary={chat.title} />
+                </ListItemButton>
+              </ListItem>
             ))}
-          </div>
-        </div>
-      </div>
+          </List>
+        </Box>
+      </Drawer>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1 sm:overflow-y-auto sm:px-2 md:px-4 py-6 md:py-8">
-          <div className="max-w-3xl mx-auto">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`mb-4 ${
-                  message.type === "bot" ? "mr-8 md:mr-12" : "ml-8 md:ml-12"
-                }`}
-              >
-                <div
-                  className={`rounded-2xl p-3 md:p-4 ${
-                    message.type === "bot"
-                      ? "bg-white shadow-sm"
-                      : "bg-gray-900 text-white"
-                  }`}
-                >
-                  {message.type === "bot" ? (
-                    <>
-                      <FormattedMessage content={message.content} />
-                      {message.isStreaming && (
-                        <span className="inline-block w-2 h-4 ml-1 bg-black animate-pulse" />
-                      )}
-                    </>
-                  ) : (
-                    <span>{message.content}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-            {isLoading && !messages.find(m => m.isStreaming) && (
-              <div className="mb-4 mr-8 md:mr-12">
-                <div className="rounded-2xl p-3 md:p-4 bg-white shadow-sm">
-                  <span className="text-gray-600">Thinking...</span>
-                </div>
-              </div>
-            )}
-            <div ref={messagesRef} />
-          </div>
-        </div>
+      {/* Main Chat Area */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          height: '100vh',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          pt: { xs: 8, sm: 9 }
+        }}
+      >
+        {/* Messages Container */}
+        <Container
+          sx={{
+            flexGrow: 1,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            py: 2
+          }}
+        >
+          {messages.map((message) => (
+            <Paper
+              key={message.id}
+              elevation={1}
+              sx={{
+                p: 2,
+                maxWidth: '80%',
+                alignSelf: message.type === 'bot' ? 'flex-start' : 'flex-end',
+                bgcolor: message.type === 'bot' ? 'background.paper' : 'primary.main',
+                color: message.type === 'bot' ? 'text.primary' : 'primary.contrastText'
+              }}
+            >
+              {message.type === 'bot' ? (
+                <FormattedMessage content={message.content} />
+              ) : (
+                <Typography>{message.content}</Typography>
+              )}
+            </Paper>
+          ))}
+          {isLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress />
+            </Box>
+          )}
+          <div ref={messagesEndRef} />
+        </Container>
 
-        {/* Input area */}
-        <div className="sm:sticky sm:bottom-0 border-t bg-white p-2 md:p-4">
-          <div className="max-w-3xl mx-auto relative">
-            <input
-              ref={inputRef}
-              type="text"
+        {/* Input Area */}
+        <Paper
+          elevation={3}
+          sx={{
+            p: 2,
+            borderTop: 1,
+            borderColor: 'divider'
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Type your message..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={handleInputFocus}
-              placeholder="Type your message..."
-              className="w-full p-3 md:p-4 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 text-sm md:text-base"
+              onKeyPress={handleKeyPress}
               disabled={isLoading}
+              multiline
+              maxRows={4}
+              sx={{ bgcolor: 'background.paper' }}
             />
-            <button
+            <IconButton
+              color="primary"
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={20} />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              <SendIcon />
+            </IconButton>
+          </Box>
+        </Paper>
+      </Box>
+
+      {/* Assessment Dialog */}
+      <Dialog
+        open={showAssessmentDialog}
+        onClose={() => setShowAssessmentDialog(false)}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {renderAssessmentIcon()}
+          {getAssessmentTitle()}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {getAssessmentDescription()}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAssessmentDialog(false)}>
+            Later
+          </Button>
+          <Button onClick={handleAssessmentStart} variant="contained">
+            Start Now
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
