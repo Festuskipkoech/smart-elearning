@@ -3,6 +3,7 @@ import MainComponent from './components/MainComponent';
 import Chatbot from './AI/Chatbot';
 import './App.css';
 import QuizSystem from './AI/QuizSystem';
+import Auth from './Authentification/Auth';
 
 function App() {
   return (
@@ -11,6 +12,8 @@ function App() {
         <Route path="/" element={<MainComponent />} />
         <Route path="/chatbot" element={<Chatbot />} />
         <Route path="/quiz" element={<QuizSystem/>} />
+        <Route path="/auth" element={<Auth/>} />
+
       </Routes>
     </Router>
   );

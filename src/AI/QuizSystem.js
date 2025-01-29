@@ -20,7 +20,7 @@ const QuizSystem = () => {
   useEffect(() => {
     const fetchProgress = async () => {
       try {
-        const response = await fetch('/api/student/progress');
+        const response = await fetch('localhost:8000/api/student/progress');
         const data = await response.json();
         setStudentProgress(data);
         checkAndShowRedirect(data);
