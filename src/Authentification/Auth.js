@@ -1,117 +1,164 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { LogIn, UserPlus } from 'lucide-react';
+import { useUser } from '../store/userStore';
+
 
 const Auth = () => {
+  const { setUser } = useUser();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [subject, setSubject] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const API_BASE_URL = 'http://localhost:8000/api/v1';
+
     try {
       if (isLogin) {
         // Login endpoint
-        const response = await axios.post('http://192.168.100.219:8000/token', 
-          new URLSearchParams({
-            username: username,
-            password: password
-          }),
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        const response = await axios.post(
+          `${API_BASE_URL}/token`, 
+          formData,
           {
-            headers: {
+            headers: { 
               'Content-Type': 'application/x-www-form-urlencoded'
             }
           }
         );
-        
-        // Store token in localStorage
-
+  
         const { access_token } = response.data;
         localStorage.setItem('token', access_token);
-        window.open('/', '_self');
+        localStorage.setItem('username', username);
+  
         alert('Login Successful!');
+        window.location.href = '/';
       } else {
-        // Register endpoint
-        await axios.post('http://192.168.100.219:8000/register', {
-          username,
-          email,
-          password
+        // Registration endpoint
+        const response = await axios.post(`${API_BASE_URL}/register`, {
+          username: username,
+          email: email,
+          password: password,
+          subject: subject
         });
-        
+        const user =response.data.id
+        console.log(user)
+        // const user_data = setUser(JSON.stringify(user))
         alert('Registration Successful!');
         setIsLogin(true);
+        localStorage.setItem('user', JSON.stringify(user));
+        console.log(user)
       }
     } catch (error) {
+      console.error('Authentication error:', error.response?.data);
       alert(error.response?.data?.detail || 'An error occurred');
     }
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold text-center mb-6">
-        {isLogin ? 'Log In' : 'Sign Up'}
-      </h2>
-      <form onSubmit={handleSubmit}>
-        {!isLogin && (
-          <div className="mb-4">
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              placeholder="Enter your username"
-              required
-            />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 flex items-center justify-center gap-2">
+            {isLogin ? (
+              <>
+                <LogIn className="text-blue-600" /> Log In
+              </>
+            ) : (
+              <>
+                <UserPlus className="text-green-600" /> Sign Up
+              </>
+            )}
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="username" className="sr-only">
+                {isLogin ? 'Username' : 'Username'}
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Username"
+              />
+            </div>
+            {!isLogin && (
+              <>
+                <div>
+                  <label htmlFor="email" className="sr-only">Email</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="Email address"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="subject" className="sr-only">Learning Subject</label>
+                  <input
+                    id="subject"
+                    name="subject"
+                    type="text"
+                    required
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="Learning Subject (e.g., Python, Math)"
+                  />
+                </div>
+              </>
+            )}
+            <div>
+              <label htmlFor="password" className="sr-only">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
+              />
+            </div>
           </div>
-        )}
-        <div className="mb-4">
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            {isLogin ? 'Username' : 'Email'}
-          </label>
-          <input
-            id="email"
-            type={isLogin ? 'text' : 'email'}
-            value={isLogin ? username : email}
-            onChange={(e) => isLogin ? setUsername(e.target.value) : setEmail(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder={isLogin ? "Enter your username" : "Enter your email"}
-            required
-          />
+
+          <div>
+            <button
+              type="submit"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              {isLogin ? 'Log In' : 'Sign Up'}
+            </button>
+          </div>
+        </form>
+
+        <div className="text-center">
+          <button 
+            onClick={() => setIsLogin(!isLogin)}
+            className="mt-2 text-sm text-indigo-600 hover:text-indigo-500"
+          >
+            {isLogin 
+              ? 'Need an account? Sign Up' 
+              : 'Already have an account? Log In'}
+          </button>
         </div>
-        <div className="mb-4">
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder="Enter your password"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-green-800 text-white py-2 px-4 rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-indigo-500"
-        >
-          {isLogin ? 'Log In' : 'Sign Up'}
-        </button>
-      </form>
-      <div className="mt-4 text-center">
-        <button 
-          onClick={() => setIsLogin(!isLogin)}
-          className="text-blue-500 hover:underline"
-        >
-          {isLogin 
-            ? 'Need an account? Sign Up' 
-            : 'Already have an account? Log In'}
-        </button>
       </div>
     </div>
   );

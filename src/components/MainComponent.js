@@ -71,7 +71,7 @@ const MainComponent = () => {
         <div className="nav-container">
           <div className="nav-brand">
             <Brain className="brand-icon" />
-            <span className="brand-name">EduAI</span>
+            <span className="brand-name">JengaAI</span>
           </div>
           <button
             className="hamburger"
