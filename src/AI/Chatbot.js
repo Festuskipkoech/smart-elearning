@@ -189,56 +189,132 @@ export default function Chatbot() {
   };
   
   // Generates a curriculum based on the subject input by the user.
-  const generateCurriculum = async (subject) => {
-    const curriculumPrompt = `Generate a comprehensive and practical curriculum for ${subject} with the following format:
-1. 4 main topics that progress logically
-2. 4 subtopics for each main topic
-3. For each subtopic, include:
-   - detailed explanation, with notes 
-   - Explained Real-world examples
-4. Focus on real-world applications and industry relevance
-5. Include specific tools, technologies, or methodologies where applicable
 
-Format the response as a clean curriculum outline with clear topic and subtopic headings.
-Use this exact format:
-1. [Topic Name]
-  a. [Subtopic 1]
-  b. [Subtopic 2]
-  ...
-2. [Topic Name]
-  a. [Subtopic 1]
-  b. [Subtopic 2]
-  ...`;
+  const [curriculumDetails, setCurriculumDetails] = useState({
+    subject: null,
+    topics: [],
+    subtopics: {},
+    currentTopicIndex: 0,
+    currentSubtopicIndex: 0,
+    completed: [],
+  });
+
+  // Modified curriculum generation
+  const generateCurriculum = async (subject) => {
+    const curriculumPrompt = `Generate a comprehensive and practical curriculum for ${subject} with:
+8 main topics that progress logically
+4 detailed subtopics for each main topic
+Each subtopic should include:
+- Detailed explanation
+- Real-world examples
+- Practical applications
+Focus on industry relevance and comprehensive learning`;
 
     try {
-      // Use the Anthropic API to generate the curriculum outline.
       const response = await anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{ role: "user", content: curriculumPrompt }],
       });
+
       const curriculumText = response.content[0].text;
-      const { topics, subtopics } = parseCurriculum(curriculumText);
-      // Create a curriculum data object with initial indices for topic and subtopic.
+      const parsedCurriculum = parseCurriculum(curriculumText);
+
       const curriculumData = {
         subject,
-        content: curriculumText,
-        topics,
-        subtopics,
+        topics: parsedCurriculum.topics,
+        subtopics: parsedCurriculum.subtopics,
         currentTopicIndex: 0,
         currentSubtopicIndex: 0,
         completed: [],
         timestamp: Date.now(),
       };
-      // Save curriculum locally and update state.
+
       localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(curriculumData));
-      setCurrentProgress(curriculumData);
+      setCurriculumDetails(curriculumData);
       return curriculumText;
     } catch (error) {
       console.error("Error generating curriculum:", error);
       throw error;
     }
   };
+
+  // Modified assessment logic
+  const checkAssessment = (topicIndex, subtopicIndex) => {
+    const totalSubtopicsPassed = (topicIndex * 4) + subtopicIndex + 1;
+    
+    if (totalSubtopicsPassed === 16 && !localStorage.getItem("exercisesTaken")) {
+      setAssessmentPopup("exercise");
+      return true;
+    }
+    
+    if ([4, 12, 20, 28].includes(totalSubtopicsPassed) && !localStorage.getItem("quizTaken")) {
+      setAssessmentPopup("quiz");
+      return true;
+    }
+    
+    if (totalSubtopicsPassed === 16 && localStorage.getItem("exercisesTaken") && !localStorage.getItem("projectTaken")) {
+      setAssessmentPopup("project");
+      return true;
+    }
+    
+    return false;
+  };
+
+  // Modified next handler to incorporate assessment logic
+  const handleNext = async () => {
+    const { topics, subtopics, currentTopicIndex, currentSubtopicIndex } = curriculumDetails;
+    
+    let newTopicIndex = currentTopicIndex;
+    let newSubtopicIndex = currentSubtopicIndex;
+    
+    // Advance subtopic or topic
+    if (currentSubtopicIndex < 3) {
+      newSubtopicIndex++;
+    } else if (currentTopicIndex < 7) {
+      newTopicIndex++;
+      newSubtopicIndex = 0;
+    } else {
+      // Curriculum complete
+      setMessages(prev => [...prev, {
+        type: "bot",
+        content: "Congratulations! You've completed the entire curriculum!",
+        id: `bot-${Date.now()}`
+      }]);
+      return;
+    }
+    
+    // Check for assessment before generating next lesson
+    const needsAssessment = checkAssessment(newTopicIndex, newSubtopicIndex);
+    if (needsAssessment) return;
+    
+    const nextTopic = topics[newTopicIndex];
+    const nextSubtopic = subtopics[nextTopic][newSubtopicIndex];
+    
+    try {
+      const lessonContent = await generateLessonContent(nextTopic, nextSubtopic);
+      
+      const updatedCurriculum = {
+        ...curriculumDetails,
+        currentTopicIndex: newTopicIndex,
+        currentSubtopicIndex: newSubtopicIndex,
+        completed: [...curriculumDetails.completed, `${newTopicIndex}-${newSubtopicIndex}`]
+      };
+      
+      setCurriculumDetails(updatedCurriculum);
+      localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(updatedCurriculum));
+      
+      setMessages(prev => [...prev, {
+        type: "bot",
+        content: `Topic: ${nextTopic}\nSubtopic: ${nextSubtopic}\n\n${lessonContent}`,
+        id: `bot-${Date.now()}`,
+        showControls: true
+      }]);
+    } catch (error) {
+      console.error("Lesson generation error:", error);
+    }
+  };
+
 
   // ---------------- Lesson Generation ----------------
   // Generates detailed lesson content for a given topic and subtopic.
@@ -323,67 +399,6 @@ Use this exact format:
   };
   
   // The Next button advances to the next subtopic or topic and generates the corresponding lesson.
-  const handleNext = async () => {
-    setIsNextLoading(true);
-    if (!currentProgress) return;
-    const curriculum = JSON.parse(localStorage.getItem(`curriculum-${currentChatId}`));
-    if (!curriculum) return;
-    let { currentTopicIndex, currentSubtopicIndex, completed, topics, subtopics } = curriculum;
-    const currentTopic = topics[currentTopicIndex];
-    // Advance to the next subtopic if available; otherwise, move to the next topic.
-    if (currentSubtopicIndex < subtopics[currentTopic].length - 1) {
-      currentSubtopicIndex++;
-    } else if (currentTopicIndex < topics.length - 1) {
-      currentTopicIndex++;
-      currentSubtopicIndex = 0;
-    } else {
-      // Curriculum is complete.
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "bot",
-          content:
-            "Congratulations! You've completed the entire curriculum! Would you like to review topics or start a new subject?",
-          id: `bot-${Date.now()}`,
-        },
-      ]);
-      setIsNextLoading(false);
-      return;
-    }
-    // Update the curriculum object with the new indices.
-    const updatedCurriculum = {
-      ...curriculum,
-      currentTopicIndex,
-      currentSubtopicIndex,
-      completed: [...completed, `${currentTopicIndex}-${currentSubtopicIndex}`],
-    };
-    localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(updatedCurriculum));
-    setCurrentProgress(updatedCurriculum);
-    const nextTopic = topics[currentTopicIndex];
-    const nextSubtopic = subtopics[nextTopic][currentSubtopicIndex] || "Overview";
-    try {
-      const lessonContent = await generateLessonContent(nextTopic, nextSubtopic);
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "bot",
-          content: `Topic: ${nextTopic}\nSubtopic: ${nextSubtopic}\n\n${lessonContent}`,
-          id: `bot-${Date.now()}`,
-          showControls: true,
-        },
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "bot",
-          content: "Sorry, I encountered an error generating the lesson. Please try again.",
-          id: `bot-error-${Date.now()}`,
-        },
-      ]);
-    }
-    setIsNextLoading(false);
-  };
 
   // ---------------- Off-Topic Question Check ----------------
   // Checks if a question from the student is off-topic compared to the current curriculum.
