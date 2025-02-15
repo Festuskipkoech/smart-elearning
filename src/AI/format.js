@@ -2,21 +2,26 @@ import React from 'react';
 
 export const FormattedMessage = ({ content }) => {
   const formatInlineText = (text) => {
+    // If the text already contains HTML tags like <span> or <code>, skip re-formatting
     if (text.includes('<span') || text.includes('<code>')) {
       return text;
     }
 
     return text
-    .replace(/\*\*\*(.*?)\*\*\*/g, '<span class="font-bold italic">$1</span>')
-    .replace(/\*\*(.*?)\*\*/g, '<span class="font-bold">$1</span>')
-    // Handle italic with single asterisk
-    .replace(/\*((?!\*)[^*]+)\*/g, '<span class="italic">$1</span>')
-    // Handle code blocks
-    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded font-mono text-sm">$1</code>');
+      // Bold + Italic: ***text***
+      .replace(/\*\*\*(.*?)\*\*\*/g, '<span class="font-bold italic">$1</span>')
+      // Bold: **text**
+      .replace(/\*\*(.*?)\*\*/g, '<span class="font-bold">$1</span>')
+      // Italic: *text*
+      .replace(/\*((?!\*)[^*]+)\*/g, '<span class="italic">$1</span>')
+      // Inline code: `text`
+      .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded font-mono text-sm">$1</code>');
   };
 
   const formatContent = (text) => {
+    // Split on actual newline characters
     const sections = text.split('\n').map(line => line.replace(/\r$/, ''));
+    
     const formattedSections = [];
     let currentSection = null;
     let listLevel = 0;
@@ -26,6 +31,7 @@ export const FormattedMessage = ({ content }) => {
     const closeCurrentSection = (index) => {
       if (!currentSection) return;
 
+      // Close out paragraph sections
       if (currentSection.type === 'paragraph') {
         formattedSections.push(
           <p
@@ -36,7 +42,9 @@ export const FormattedMessage = ({ content }) => {
             }}
           />
         );
-      } else if (currentSection.type === 'code') {
+      }
+      // Close out code blocks
+      else if (currentSection.type === 'code') {
         formattedSections.push(
           <pre
             key={`code-${index}`}
@@ -56,14 +64,19 @@ export const FormattedMessage = ({ content }) => {
       const indentMatch = line.match(/^(\s*)/);
       const indentSize = indentMatch ? indentMatch[1].length : 0;
 
-      // Handle code blocks with language specification
+      // ------------------------------------------------
+      // 1) CODE BLOCK HANDLING (```lang ... ```)
+      // ------------------------------------------------
       if (trimmedLine.match(/^```(\w*)$/)) {
+        // Opening code block
         if (!inCodeBlock) {
           closeCurrentSection(index);
           inCodeBlock = true;
           codeLanguage = trimmedLine.match(/^```(\w*)$/)[1];
           currentSection = { type: 'code', content: [] };
-        } else {
+        } 
+        // Closing code block
+        else {
           inCodeBlock = false;
           closeCurrentSection(index);
           codeLanguage = '';
@@ -71,12 +84,15 @@ export const FormattedMessage = ({ content }) => {
         return;
       }
 
+      // If we are in a code block, just keep pushing lines to currentSection
       if (inCodeBlock && currentSection?.type === 'code') {
         currentSection.content.push(line);
         return;
       }
 
-      // Handle headings
+      // ------------------------------------------------
+      // 2) HEADINGS (#, ##, ###)
+      // ------------------------------------------------
       if (trimmedLine.match(/^#\s+[^#]/)) {
         closeCurrentSection(index);
         formattedSections.push(
@@ -113,10 +129,14 @@ export const FormattedMessage = ({ content }) => {
           />
         );
       }
-      // Enhanced unordered list handling
+
+      // ------------------------------------------------
+      // 3) UNORDERED LISTS (*, -, •)
+      // ------------------------------------------------
       else if (trimmedLine.match(/^\s*[\*\-•]\s/)) {
         const nestLevel = Math.floor(indentSize / 2);
-        
+
+        // If we aren't currently building an unordered list (or the nesting level changed), close out the old section
         if (!currentSection || currentSection.type !== 'unordered-list' || listLevel !== nestLevel) {
           closeCurrentSection(index);
           currentSection = {
@@ -145,10 +165,15 @@ export const FormattedMessage = ({ content }) => {
           </li>
         );
       }
-      // Enhanced ordered list handling
-      else if (trimmedLine.match(/^\s*\d+\.\s/)) {
+
+      // ------------------------------------------------
+      // 4) ORDERED LISTS (digits or letters followed by a period)
+      //    Matches lines like "1. Something" or "a. Something"
+      // ------------------------------------------------
+      else if (trimmedLine.match(/^\s*([0-9]+|[a-zA-Z])\.\s/)) {
         const nestLevel = Math.floor(indentSize / 2);
-        
+
+        // If we aren't currently building an ordered list (or the nesting level changed), close out the old section
         if (!currentSection || currentSection.type !== 'ordered-list' || listLevel !== nestLevel) {
           closeCurrentSection(index);
           currentSection = {
@@ -160,8 +185,13 @@ export const FormattedMessage = ({ content }) => {
           listLevel = nestLevel;
         }
 
-        const listItemContent = trimmedLine.replace(/^\s*\d+\.\s/, '');
-        const itemNumber = currentSection.items.length + 1;
+        // Capture the bullet prefix ("1", "2", "a", "b", etc.)
+        const match = trimmedLine.match(/^\s*([0-9]+|[a-zA-Z])\.\s/);
+        const bullet = match ? match[1] : '?';
+
+        // Remove the leading "1. " or "a. "
+        const listItemContent = trimmedLine.replace(/^\s*([0-9]+|[a-zA-Z])\.\s/, '');
+
         currentSection.items.push(
           <li
             key={`ol-${index}`}
@@ -169,7 +199,8 @@ export const FormattedMessage = ({ content }) => {
               nestLevel > 0 ? `ml-${nestLevel * 4}` : ''
             }`}
           >
-            <span className="mr-2">{itemNumber}.</span>
+            {/* Display the bullet exactly as found */}
+            <span className="mr-2">{bullet}.</span>
             <span
               dangerouslySetInnerHTML={{
                 __html: formatInlineText(listItemContent)
@@ -178,7 +209,10 @@ export const FormattedMessage = ({ content }) => {
           </li>
         );
       }
-      // Regular paragraphs
+
+      // ------------------------------------------------
+      // 5) PARAGRAPHS
+      // ------------------------------------------------
       else if (trimmedLine.trim()) {
         if (!currentSection || currentSection.type !== 'paragraph') {
           closeCurrentSection(index);
@@ -186,22 +220,25 @@ export const FormattedMessage = ({ content }) => {
         }
         currentSection.content.push(trimmedLine);
       }
-      // Empty lines
+
+      // ------------------------------------------------
+      // 6) EMPTY LINES
+      // ------------------------------------------------
       else if (trimmedLine === '') {
         closeCurrentSection(index);
         listLevel = 0;
       }
     });
 
-    // Close any remaining section
+    // Close any remaining open section after the loop
     closeCurrentSection(sections.length);
 
-    // Process all sections and convert them to proper React elements
+    // Now, build the final React elements from the sections
     return formattedSections.map((section, index) => {
       if (React.isValidElement(section)) {
+        // This is already a heading or similar
         return section;
       }
-
       if (section?.type === 'unordered-list') {
         return (
           <ul

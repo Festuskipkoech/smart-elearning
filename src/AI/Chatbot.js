@@ -1,30 +1,58 @@
-// Chatbot.jsx
 import React, { useState, useRef, useEffect } from "react";
-import {
-  MessageCircle,
-  Send,
-  Menu,
-  X,
-  Trash2,
-  ArrowRight,
-  RotateCcw,
-} from "lucide-react";
-import { Anthropic } from '@anthropic-ai/sdk';
-import CircularProgress from '@mui/material/CircularProgress';
-import { API_KEY } from "../api.js"; // Make sure your API_KEY is exported from here
+import { MessageCircle, Send, Menu, X, Trash2, ArrowRight } from "lucide-react";
+import { Anthropic } from "@anthropic-ai/sdk";
+import CircularProgress from "@mui/material/CircularProgress";
+import { useNavigate, useLocation } from "react-router-dom";
+import { API_KEY } from "../api.js";
 import { FormattedMessage } from "./format.js";
-import { useNavigate } from "react-router-dom";
-
-// Initialize the Anthropic client (or any other generative AI client you prefer)
-const anthropic = new Anthropic({ apiKey: API_KEY, dangerouslyAllowBrowser: true });
+const apiKey = API_KEY;
+const anthropic = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
 export default function Chatbot() {
-  // Chat and UI states
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [currentProgress, setCurrentProgress] = useState(() => {
-    const saved = localStorage.getItem("currentProgress");
-    return saved ? JSON.parse(saved) : null;
+  // Core states for chat functionality
+  const location = useLocation();
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem("currentMessages");
+    return saved
+      ? JSON.parse(saved)
+      : [
+          {
+            type: "bot",
+            content:
+              "Hi! I'm your AI Tutor. what would you like to learn today?",
+            id: "initial",
+          },
+        ];
   });
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isNextLoading, setIsNextLoading] = useState(false);
+  const [assessmentCompleted, setAssessmentCompleted] = useState(false);
+
+
+  // Curriculum states
+  const [curriculum, setCurriculum] = useState(() => {
+    const saved = localStorage.getItem("curriculum");
+    return saved
+      ? JSON.parse(saved)
+      : {
+          subject: null,
+          topics: [],
+          subtopics: {},
+          currentTopicIndex: 0,
+          currentSubtopicIndex: 0,
+          hasStarted: false,
+        };
+  });
+  useEffect(() => {
+    localStorage.setItem("currentMessages", JSON.stringify(messages));
+  }, [messages]);
+  
+  const chatId = localStorage.getItem("currentChatId");
+  // const storedCurriculum = localStorage.getItem(`curriculum-${chatId}`);
+  
+  // Chat history state
   const [chatHistory, setChatHistory] = useState(() => {
     const saved = localStorage.getItem("chatHistory");
     return saved ? JSON.parse(saved) : [];
@@ -33,469 +61,354 @@ export default function Chatbot() {
     const saved = localStorage.getItem("currentChatId");
     return saved || `chat-${Date.now()}`;
   });
-  const [messages, setMessages] = useState(() => {
-    const saved = localStorage.getItem(`messages-${currentChatId}`);
-    return saved
-      ? JSON.parse(saved)
-      : [
-          {
-            type: "bot",
-            content: "Hi! I'm your AI tutor. What would you like to learn today?",
-            id: "initial",
-          },
-        ];
-  });
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  // For scrolling, input focus, etc.
-  const messagesRef = useRef(null);
-  const responseIdRef = useRef(0);
-  const inputRef = useRef(null);
-  const navigate = useNavigate();
-
-  // Assessment popup state
-  const [assessmentPopup, setAssessmentPopup] = useState(null);
-  const [isNextLoading, setIsNextLoading] = useState(false);
-  const [isRedoLoading, setIsRedoLoading] = useState(false);
-
-  // NEW: Off-topic question modal state
-  const [newChatPopup, setNewChatPopup] = useState(null);
-
-  // ---------------- Persist State to localStorage ----------------
-  useEffect(() => {
-    if (currentProgress) {
-      localStorage.setItem("currentProgress", JSON.stringify(currentProgress));
-    }
-  }, [currentProgress]);
-
-  useEffect(() => {
-    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-  }, [chatHistory]);
-
   useEffect(() => {
     localStorage.setItem("currentChatId", currentChatId);
   }, [currentChatId]);
 
-  useEffect(() => {
-    localStorage.setItem(`messages-${currentChatId}`, JSON.stringify(messages));
-  }, [messages, currentChatId]);
+  // Assessment state
+  const [assessmentPopup, setAssessmentPopup] = useState(null);
+  const [newChatPopup, setNewChatPopup] = useState(null);
 
+  const [assessmentData, setAssessmentData] = useState(() => {
+    const saved = localStorage.getItem("assessmentData");
+    return saved ? JSON.parse(saved) : {};
+  });
+  useEffect(() => {
+    const submitted = localStorage.getItem("assessmentSubmitted");
+    if (submitted === "true") {
+      setAssessmentPopup(null);
+      localStorage.removeItem("assessmentSubmitted");
+    }
+  }, [messages]);
+  
+  useEffect(() => {
+    if (curriculum && currentChatId) {
+      localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(curriculum));
+    }
+  }, [curriculum, currentChatId]);
+
+  useEffect(() => {
+    localStorage.setItem("assessmentData", JSON.stringify(assessmentData));
+  }, [assessmentData]);
+
+  // Refs
+  const messagesRef = useRef(null);
+  const inputRef = useRef(null);
+  const navigate = useNavigate();
+
+  // Save chat history to localStorage
+  useEffect(() => {
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+  }, [chatHistory]);
+
+  // Scroll to bottom on new messages
   useEffect(() => {
     messagesRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ---------------- Input Focus/Blur Handlers ----------------
-  const handleInputFocus = () => {
-    if (window.innerWidth <= 768) {
-      setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 100);
-    }
-  };
-  const handleInputBlur = () => {
-    if (window.innerWidth <= 768) {
-      inputRef.current?.blur();
-    }
-  };
+  // Check for assessments
 
-  // ---------------- Keyboard Handler ----------------
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleSend();
+  useEffect(() => {
+    if (curriculum.hasStarted && !assessmentCompleted) {
+      localStorage.removeItem("assessmentCompleted");
+      localStorage.removeItem("assessmentPopup");
     }
-  };
+  }, [curriculum.currentTopicIndex, curriculum.currentSubtopicIndex]);
 
-  // ---------------- Mobile Menu & Chat History Functions ----------------
-  const toggleMobileMenu = () => setIsMobileMenuOpen((prev) => !prev);
-  const createNewChat = () => {
-    const newChatId = `chat-${Date.now()}`;
-    const newChat = { id: newChatId, title: "New Chat", timestamp: Date.now() };
-    setChatHistory((prev) => [newChat, ...prev]);
-    setCurrentChatId(newChatId);
-    setMessages([
-      {
-        type: "bot",
-        content: "Hello! I'm your AI assistant. How can I help you today?",
-        id: "initial",
-      },
-    ]);
-    // Reset current progress when starting a new chat
-    setCurrentProgress(null);
-  };
-  const loadChat = (chatId) => {
-    const saved = localStorage.getItem(`messages-${chatId}`);
-    if (saved) {
-      setMessages(JSON.parse(saved));
-      setCurrentChatId(chatId);
-      setIsMobileMenuOpen(false);
+  useEffect(() => {
+    // Skip if curriculum hasn't started or assessment is already completed
+    if (!curriculum.hasStarted || assessmentCompleted) return;
+
+    const totalSubtopics = 
+      (curriculum.currentTopicIndex * 4) + curriculum.currentSubtopicIndex + 1;
+    
+    // Only check for assessment if we've completed the current subtopic
+    if (messages[messages.length - 1]?.type !== "bot") return;
+
+    let assessmentType = null;
+    
+    if ([4, 12, 28].includes(totalSubtopics)) {
+      assessmentType = "quiz";
+    } else if ([8, 16, 24].includes(totalSubtopics)) {
+      assessmentType = "exercise";
+    } else if ([20, 32].includes(totalSubtopics)) {
+      assessmentType = "project";
     }
-  };
-  const deleteChat = (chatId, e) => {
-    e.stopPropagation();
-    setChatHistory((prev) => prev.filter((chat) => chat.id !== chatId));
-    localStorage.removeItem(`messages-${chatId}`);
-    if (currentChatId === chatId) createNewChat();
-  };
-  const updateChatTitle = (chatId) => {
-    setChatHistory((prev) =>
-      prev.map((chat) => {
-        if (chat.id === chatId) {
-          const msgs = JSON.parse(localStorage.getItem(`messages-${chatId}`) || "[]");
-          const firstUser = msgs.find((m) => m.type === "user");
-          const title = firstUser
-            ? firstUser.content.slice(0, 30) + (firstUser.content.length > 30 ? "..." : "")
-            : "New Chat";
-          return { ...chat, title };
-        }
-        return chat;
-      })
-    );
-  };
 
-  // ---------------- Curriculum Generation ----------------
-  // Parse the curriculum text to extract topics and subtopics.
-  // Also, if a topic has no subtopics, add a default subtopic "Overview"
+    if (assessmentType) {
+      // Check if this specific assessment hasn't been shown before
+      const assessmentKey = `${assessmentType}-${totalSubtopics}`;
+      const hasShownAssessment = localStorage.getItem(assessmentKey);
+      
+      if (!hasShownAssessment) {
+        setAssessmentPopup(assessmentType);
+        prepareAssessmentData(assessmentType, curriculum);
+        localStorage.setItem(assessmentKey, "true");
+      }
+    }
+  }, [curriculum, messages, assessmentCompleted]);
+ 
+  // Parse curriculum from AI response
 
-  const parseCurriculum = (curriculumText) => {
-    const lines = curriculumText.split("\n");
+  const parseCurriculum = (text) => {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
     const topics = [];
     const subtopics = {};
     let currentTopic = null;
-    
-    lines.forEach((line) => {
-      // Look for main topics formatted as "1. Topic Name"
-      if (/^\d+\.\s/.test(line)) {
-        currentTopic = line.replace(/^\d+\.\s/, "").trim();
-        topics.push(currentTopic);
-        subtopics[currentTopic] = [];
-      } 
-      // Look for subtopics formatted as "a. Subtopic" or "1.1 Subtopic"
-      else if (currentTopic && (/^[a-h]\.\s/.test(line) || /^\d+\.\d+\s/.test(line))) {
-        const subtopic = line.replace(/^[a-h]\.\s|^\d+\.\d+\s/, "").trim();
-        subtopics[currentTopic].push(subtopic);
+  
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Match topic lines (starting with number)
+      if (/^\d+\./.test(line)) {
+        // Clean the topic text
+        currentTopic = line.replace(/^\d+\.\s*/, '').trim();
+        if (currentTopic) {
+          topics.push(currentTopic);
+          subtopics[currentTopic] = [];
+          
+          // Look ahead for subtopics
+          let j = i + 1;
+          while (j < lines.length && /^[a-z]\./.test(lines[j])) {
+            const subtopic = lines[j].replace(/^[a-z]\.\s*/, '').trim();
+            if (subtopic) {
+              subtopics[currentTopic].push(subtopic);
+            }
+            j++;
+          }
+        }
       }
-    });
+    }
+  
+    // Validate that we have both topics and subtopics
+    const isValid = topics.length > 0 && 
+                    topics.every(topic => subtopics[topic] && subtopics[topic].length > 0);
     
-    // Ensure every topic has at least one valid subtopic; if not, default to "Overview"
-    topics.forEach((topic) => {
-      if (!subtopics[topic] || subtopics[topic].length === 0 || !subtopics[topic][0].trim()) {
-        subtopics[topic] = ["Overview"];
-      }
-    });
-    
-    console.log("Parsed Topics:", topics);
-    console.log("Parsed Subtopics:", subtopics);
+    if (!isValid) {
+      console.error("Invalid curriculum structure:", { topics, subtopics });
+      throw new Error("Failed to parse curriculum - invalid structure");
+    }
+  
     return { topics, subtopics };
   };
-  
-  // Generates a curriculum based on the subject input by the user.
 
-  const [curriculumDetails, setCurriculumDetails] = useState({
-    subject: null,
-    topics: [],
-    subtopics: {},
-    currentTopicIndex: 0,
-    currentSubtopicIndex: 0,
-    completed: [],
-  });
-
-  // Modified curriculum generation
+  // Generate curriculum
   const generateCurriculum = async (subject) => {
-    const curriculumPrompt = `Generate a comprehensive and practical curriculum for ${subject} with:
-8 main topics that progress logically
-4 detailed subtopics for each main topic
-Each subtopic should include:
-- Detailed explanation
-- Real-world examples
-- Practical applications
-Focus on industry relevance and comprehensive learning`;
+    const prompt = `Generate a comprehensive curriculum for ${subject} with 8 main topics and 4 subtopics each.
+     covering only the most essential technical concepts and practical skills. Focus on current industry-relevant topics and hands-on technical content.
+     Format each topic as "1. Topic Name" and subtopics as "a. Subtopic Name"`;
 
     try {
       const response = await anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: curriculumPrompt }],
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }],
       });
 
-      const curriculumText = response.content[0].text;
-      const parsedCurriculum = parseCurriculum(curriculumText);
+      const { topics, subtopics } = parseCurriculum(response.content[0].text);
 
-      const curriculumData = {
+      setCurriculum({
         subject,
-        topics: parsedCurriculum.topics,
-        subtopics: parsedCurriculum.subtopics,
+        topics,
+        subtopics,
         currentTopicIndex: 0,
         currentSubtopicIndex: 0,
-        completed: [],
-        timestamp: Date.now(),
-      };
-
-      localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(curriculumData));
-      setCurriculumDetails(curriculumData);
-      return curriculumText;
+        hasStarted: false,
+      });
+      console.log("Curriculum", curriculum);
+      return response.content[0].text;
     } catch (error) {
       console.error("Error generating curriculum:", error);
       throw error;
     }
   };
 
-  // Modified assessment logic
-  const checkAssessment = (topicIndex, subtopicIndex) => {
-    const totalSubtopicsPassed = (topicIndex * 4) + subtopicIndex + 1;
-    
-    if (totalSubtopicsPassed === 16 && !localStorage.getItem("exercisesTaken")) {
-      setAssessmentPopup("exercise");
-      return true;
-    }
-    
-    if ([4, 12, 20, 28].includes(totalSubtopicsPassed) && !localStorage.getItem("quizTaken")) {
-      setAssessmentPopup("quiz");
-      return true;
-    }
-    
-    if (totalSubtopicsPassed === 16 && localStorage.getItem("exercisesTaken") && !localStorage.getItem("projectTaken")) {
-      setAssessmentPopup("project");
-      return true;
-    }
-    
-    return false;
-  };
+  // Generate lesson content
+  const generateLesson = async (topic, subtopic) => {
+    const prompt = `As an expert tutor, create a detailed notes for ${subtopic} within ${topic}. Include:
 
-  // Modified next handler to incorporate assessment logic
-  const handleNext = async () => {
-    const { topics, subtopics, currentTopicIndex, currentSubtopicIndex } = curriculumDetails;
-    
-    let newTopicIndex = currentTopicIndex;
-    let newSubtopicIndex = currentSubtopicIndex;
-    
-    // Advance subtopic or topic
-    if (currentSubtopicIndex < 3) {
-      newSubtopicIndex++;
-    } else if (currentTopicIndex < 7) {
-      newTopicIndex++;
-      newSubtopicIndex = 0;
-    } else {
-      // Curriculum complete
-      setMessages(prev => [...prev, {
-        type: "bot",
-        content: "Congratulations! You've completed the entire curriculum!",
-        id: `bot-${Date.now()}`
-      }]);
-      return;
-    }
-    
-    // Check for assessment before generating next lesson
-    const needsAssessment = checkAssessment(newTopicIndex, newSubtopicIndex);
-    if (needsAssessment) return;
-    
-    const nextTopic = topics[newTopicIndex];
-    const nextSubtopic = subtopics[nextTopic][newSubtopicIndex];
-    
-    try {
-      const lessonContent = await generateLessonContent(nextTopic, nextSubtopic);
-      
-      const updatedCurriculum = {
-        ...curriculumDetails,
-        currentTopicIndex: newTopicIndex,
-        currentSubtopicIndex: newSubtopicIndex,
-        completed: [...curriculumDetails.completed, `${newTopicIndex}-${newSubtopicIndex}`]
-      };
-      
-      setCurriculumDetails(updatedCurriculum);
-      localStorage.setItem(`curriculum-${currentChatId}`, JSON.stringify(updatedCurriculum));
-      
-      setMessages(prev => [...prev, {
-        type: "bot",
-        content: `Topic: ${nextTopic}\nSubtopic: ${nextSubtopic}\n\n${lessonContent}`,
-        id: `bot-${Date.now()}`,
-        showControls: true
-      }]);
-    } catch (error) {
-      console.error("Lesson generation error:", error);
-    }
-  };
+    1. Clear explanations of different concepts in ${subtopic}
+    2. Real-world applications
+    3. Make the lesson practical`;
 
-
-  // ---------------- Lesson Generation ----------------
-  // Generates detailed lesson content for a given topic and subtopic.
-  const generateLessonContent = async (topic, subtopic) => {
-    // If subtopic is undefined, use a default value.
-    const safeSubtopic = (subtopic && subtopic.trim().length > 0) ? subtopic : "Overview";
-    const lessonPrompt = `You are an expert tutor renowned for delivering insightful and detailed lessons. For the topic "${topic}" specifically about "${safeSubtopic}", create an in-depth lesson that meets the following criteria:
-
-    1. **Define Key Concepts and Terminologies:**  
-       - Provide clear, comprehensive definitions for all technical terms.  
-       - Explain underlying ideas using vivid real-world analogies and intuitive examples.
-    
-    2. **Structured Content Breakdown:**  
-       Organize the lesson into well-defined sections. Include, at a minimum:
-       - **Detailed Notes with Analogies:** Explain each concept with vivid analogies and relatable scenarios.
-       - **Step-by-Step Examples:** Present sequential examples that demonstrate how the concept is applied in real-life situations.
-       - **Common Pitfalls and Solutions:** Identify frequent mistakes or misconceptions, and offer strategies to overcome them.
-       - **Real-World Applications:** Describe how the concept is applied across various industries or daily life scenarios.
-    
-    3. **Explanatory Depth and Engagement:**  
-       - Dive deep into the reasoning behind each concept. Explain not just what a concept is, but why it matters and how it works in practice.
-       - Integrate 2-3 reflective questions or mini-quizzes throughout the lesson to encourage the student to engage actively with the material.
-       - Where relevant, suggest diagrams, flowcharts, or visual aids that can help clarify complex ideas.
-    
-    4. **Key Takeaways Summary:**  
-       - Conclude with a concise summary that reinforces the most critical points, ensuring that the student can recall the essential information easily.
-    
-    5. **Practical Application Tips and Further Exploration:**  
-       - Provide actionable, step-by-step tips or strategies that the student can implement to master and apply the concept effectively.  
-       - Include a brief real-life case study or scenario that demonstrates successful application of the concept.
-       - End with a 'Further Exploration' section suggesting additional resources or research questions for students who wish to learn more.
-    
-    Ensure that your lesson is engaging, logically structured, and tailored to facilitate both theoretical understanding and practical application. Use bullet points or numbered lists where appropriate for clarity.`;
-    
-    
-    
     try {
       const response = await anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: lessonPrompt }],
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }],
       });
       return response.content[0].text;
     } catch (error) {
-      console.error("Error generating lesson content:", error);
+      console.error("Error generating lesson:", error);
       throw error;
     }
   };
 
-  // ---------------- Navigation Handlers (Redo / Next) ----------------
-  // The Redo button regenerates the current lesson with alternate examples.
-  const handleRedo = async () => {
-    setIsRedoLoading(true);
-    if (!currentProgress) return;
-    const curriculum = JSON.parse(localStorage.getItem(`curriculum-${currentChatId}`));
-    if (!curriculum) return;
-    const { currentTopicIndex, currentSubtopicIndex, topics, subtopics } = curriculum;
-    const currentTopic = topics[currentTopicIndex];
-    const currentSubtopic = subtopics[currentTopic][currentSubtopicIndex] || "Overview";
+  // Handle get started / next
+
+  const handleNext = async () => {
+    setIsNextLoading(true);
+  
     try {
-      const lessonContent = await generateLessonContent(currentTopic, currentSubtopic);
+      if (!curriculum.hasStarted) {
+        setCurriculum((prev) => ({ ...prev, hasStarted: true }));
+      } else {
+        if (curriculum.currentSubtopicIndex < 3) {
+          setCurriculum((prev) => ({
+            ...prev,
+            currentSubtopicIndex: prev.currentSubtopicIndex + 1,
+          }));
+        } else if (curriculum.currentTopicIndex < 7) {
+          setCurriculum((prev) => ({
+            ...prev,
+            currentTopicIndex: prev.currentTopicIndex + 1,
+            currentSubtopicIndex: 0,
+          }));
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              type: "bot",
+              content: "Congratulations! You've completed the curriculum!",
+              id: `bot-${Date.now()}`,
+            },
+          ]);
+          setIsNextLoading(false);
+          return;
+        }
+      }
+  
+      const topic = curriculum.topics[curriculum.currentTopicIndex];
+      const subtopics = curriculum.subtopics[topic];
+      
+      if (!topic || !subtopics || !subtopics[curriculum.currentSubtopicIndex]) {
+        throw new Error(`Invalid curriculum state: ${JSON.stringify({
+          topic,
+          subtopicsExist: !!subtopics,
+          currentIndex: curriculum.currentSubtopicIndex
+        })}`);
+      }
+  
+      const subtopic = subtopics[curriculum.currentSubtopicIndex];
+      const lessonContent = await generateLesson(topic, subtopic);
+      
       setMessages((prev) => [
         ...prev,
         {
           type: "bot",
-          content: `Subtopic: ${currentSubtopic}\n(Topic: ${currentTopic})\n\nLet's review with different examples:\n\n${lessonContent}`,
+          content: `${topic} - ${subtopic}\n\n${lessonContent}`,
           id: `bot-${Date.now()}`,
           showControls: true,
         },
       ]);
     } catch (error) {
+      console.error("Error in handleNext:", error);
       setMessages((prev) => [
         ...prev,
         {
           type: "bot",
-          content: "Sorry, I encountered an error generating the lesson. Please try again.",
+          content: "Sorry, an error occurred. Please try refreshing the page.",
           id: `bot-error-${Date.now()}`,
         },
       ]);
     }
-    setIsRedoLoading(false);
-  };
   
-  // The Next button advances to the next subtopic or topic and generates the corresponding lesson.
+    setIsNextLoading(false);
+  };
+  // Check if question is on topic
+  const isQuestionRelated = (question) => {
+    if (!curriculum.subject) return true;
 
-  // ---------------- Off-Topic Question Check ----------------
-  // Checks if a question from the student is off-topic compared to the current curriculum.
-  const isQuestionOffTopic = (userInput, curriculum) => {
-    if (!userInput.includes("?")) return false; // Not a question
-    const subject = curriculum.subject.toLowerCase();
-    const currentTopic = curriculum.topics[curriculum.currentTopicIndex].toLowerCase();
-    const currentSubtopic =
-      curriculum.subtopics[curriculum.topics[curriculum.currentTopicIndex]][curriculum.currentSubtopicIndex];
-    const lowerInput = userInput.toLowerCase();
-    // If the question does not mention the subject, current topic, or subtopic, consider it off-topic.
-    if (
-      !lowerInput.includes(subject) &&
-      !lowerInput.includes(currentTopic) &&
-      !lowerInput.includes(currentSubtopic?.toLowerCase() || "")
-    ) {
-      return true;
-    }
-    return false;
+    const keywords = [
+      curriculum.subject,
+      curriculum.topics[curriculum.currentTopicIndex],
+      curriculum.subtopics[curriculum.topics[curriculum.currentTopicIndex]][
+        curriculum.currentSubtopicIndex
+      ],
+    ].map((k) => k.toLowerCase());
+
+    return keywords.some((k) => question.toLowerCase().includes(k));
   };
 
-  // ---------------- Handle User Response ----------------
-  // If no curriculum exists, generate one using the user’s subject input.
-  // Otherwise, resume from the saved curriculum or answer a question.
-  const handleResponse = async (userInput) => {
-    try {
-      const existing = localStorage.getItem(`curriculum-${currentChatId}`);
-      if (!existing) {
-        // Generate a new curriculum based on user input (subject)
-        const curriculum = await generateCurriculum(userInput);
-        const parsed = parseCurriculum(curriculum);
-        setMessages((prev) => [
-          ...prev,
-          {
-            type: "bot",
-            content:
-              curriculum +
-              "\n\nHere are the topics in your curriculum:\n" +
-              parsed.topics.join("\n"),
-            id: `bot-${Date.now()}`,
-            showControls: true,
-          },
-        ]);
-      } else {
-        // Resume from an existing curriculum
-        const curriculumData = JSON.parse(existing);
-        setCurrentProgress(curriculumData);
-        // If the input is a follow-up question related to the current lesson, simply answer it.
-        // Otherwise, if it is off-topic, the off-topic modal should have already been triggered.
-        const currentTopic = curriculumData.topics[curriculumData.currentTopicIndex];
-        const currentSubtopic =
-          curriculumData.subtopics[currentTopic][curriculumData.currentSubtopicIndex] || "Overview";
-        const followUpAnswer = `You asked: "${userInput}"\n\n(Here is an answer based on the current lesson on "${currentSubtopic}" in "${currentTopic}")`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            type: "bot",
-            content: followUpAnswer,
-            id: `bot-${Date.now()}`,
-            showControls: true,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Error handling response:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "bot",
-          content: "I encountered an error. Please try again.",
-          id: `bot-error-${Date.now()}`,
-        },
-      ]);
-    }
-  };
-
-  // ---------------- Handle Send ----------------
+  // Handle message send
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+
     const userMessage = input.trim();
-    const messageId = `user-${responseIdRef.current}`;
-    handleInputBlur();
     setMessages((prev) => [
       ...prev,
-      { type: "user", content: userMessage, id: messageId },
+      { type: "user", content: userMessage, id: `user-${Date.now()}` },
     ]);
     setInput("");
-    
-    // If a curriculum exists and the input is a question that is off-topic, show the off-topic modal.
-    if (currentProgress && isQuestionOffTopic(userMessage, currentProgress)) {
-      setNewChatPopup({ question: userMessage });
-      return;
-    }
-    
     setIsLoading(true);
+
     try {
-      await handleResponse(userMessage);
+      // Check for greetings
+      if (/^(hi|hello|hey|greetings|good (morning|afternoon|evening)|sup|yo|howdy|hi there|what('s| is) up|how('s| is) it going|hola|bonjour|namaste)/i.test(userMessage.trim())) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "bot",
+            content: "Hello! How can I help you with your learning today?",
+            id: `bot-${Date.now()}`,
+          },
+        ]);
+        setIsLoading(false);
+        return;
+      }
+
+      // If no curriculum exists, generate one
+      if (!curriculum.subject) {
+        const curriculumText = await generateCurriculum(userMessage);
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "bot",
+            content: `Here's your curriculum for ${userMessage}:\n\n${curriculumText}\n\nClick "Get Started" to begin learning!`,
+            id: `bot-${Date.now()}`,
+            showControls: true,
+          },
+        ]);
+
+        // Update chat history
+        const newChat = {
+          id: currentChatId,
+          title: userMessage,
+          timestamp: Date.now(),
+        };
+        setChatHistory((prev) => [newChat, ...prev]);
+      }
+      // Handle questions
+      else if (userMessage.includes("?")) {
+        if (!isQuestionRelated(userMessage)) {
+          setNewChatPopup({ question: userMessage });
+        } else {
+          const response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1000,
+            messages: [
+              {
+                role: "user",
+                content: `Based on the topic "${
+                  curriculum.topics[curriculum.currentTopicIndex]
+                }" and subtopic "${
+                  curriculum.subtopics[
+                    curriculum.topics[curriculum.currentTopicIndex]
+                  ][curriculum.currentSubtopicIndex]
+                }", answer this question: ${userMessage}`,
+              },
+            ],
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              type: "bot",
+              content: response.content[0].text,
+              id: `bot-${Date.now()}`,
+            },
+          ]);
+        }
+      }
     } catch (error) {
       console.error("Error:", error);
       setMessages((prev) => [
@@ -503,154 +416,180 @@ Focus on industry relevance and comprehensive learning`;
         {
           type: "bot",
           content: "Sorry, I encountered an error. Please try again.",
-          id: `error-${responseIdRef.current}`,
+          id: `bot-error-${Date.now()}`,
         },
       ]);
-    } finally {
-      setIsLoading(false);
-      messagesRef.current?.scrollIntoView({ behavior: "smooth" });
     }
+
+    setIsLoading(false);
   };
 
-  // Handler for confirming an off-topic question to start a new chat.
-  const confirmNewChat = async () => {
-    const question = newChatPopup.question;
-    setNewChatPopup(null);
-    createNewChat();
-    // Use the new question as the new subject input.
-    await handleResponse(question);
+  // Chat management functions
+  const createNewChat = () => {
+    clearChatData();
+    const newChatId = `chat-${Date.now()}`;
+    setCurrentChatId(newChatId);
+    setCurriculum({
+      subject: null,
+      topics: [],
+      subtopics: {},
+      currentTopicIndex: 0,
+      currentSubtopicIndex: 0,
+      hasStarted: false,
+    });
+    setMessages([
+      {
+        type: "bot",
+        content: "Hi! I'm your AI tutor. What would you like to learn today?",
+        id: "initial",
+      },
+    ]);
+    setAssessmentData({});
+    setAssessmentCompleted(false);
   };
 
-  // ---------------- Automatically Show Assessment Popup ----------------
-  useEffect(() => {
-    if (currentProgress) {
-      // Use currentTopicIndex as a measure for topics completed.
-      const topicsCompleted = currentProgress.currentTopicIndex;
-      // Thresholds: quiz after 2 topics, exercises after 4 topics, project after 6 topics.
-      if (topicsCompleted >= 2 && !localStorage.getItem("quizTaken")) {
-        setAssessmentPopup("quiz");
-      } else if (topicsCompleted >= 4 && !localStorage.getItem("exercisesTaken")) {
-        setAssessmentPopup("exercise");
-      } else if (topicsCompleted >= 6 && !localStorage.getItem("projectTaken")) {
-        setAssessmentPopup("project");
-      } else {
-        setAssessmentPopup(null);
+  // Handle assessment navigation
+  const prepareAssessmentData = (type, currentCurriculum) => {
+    const coveredTopics = [];
+    const coveredSubtopics = {};
+  
+    for (let i = 0; i <= currentCurriculum.currentTopicIndex; i++) {
+      const topic = currentCurriculum.topics[i];
+      coveredTopics.push(topic);
+      
+      // Initialize the array for the current topic
+      coveredSubtopics[topic] = [];
+  
+      // Determine the maximum subtopic index to include
+      const maxSubtopicIndex =
+        i === currentCurriculum.currentTopicIndex
+          ? currentCurriculum.currentSubtopicIndex
+          : 3;
+  
+      // Push each covered subtopic into the array
+      for (let j = 0; j <= maxSubtopicIndex; j++) {
+        coveredSubtopics[topic].push(currentCurriculum.subtopics[topic][j]);
       }
     }
-  }, [currentProgress]);
-
-  const openQuiz = () => {
-    window.open(`/quiz?assessmentType=${assessmentPopup}`, '_self');
+  
+    setAssessmentData({
+      type,
+      subject: currentCurriculum.subject,
+      coveredTopics,
+      coveredSubtopics,
+      timestamp: Date.now(),
+    });
   };
-  // When the user confirms the popup, mark the assessment as taken and navigate.
+  
+
+
   const handleAssessmentConfirm = () => {
-    localStorage.setItem(assessmentPopup + "Taken", "true");
-    openQuiz();
+    const currentAssessment = assessmentPopup;
+    setAssessmentPopup(null);
+    
+    // Don't set as completed until they actually complete the assessment
+    localStorage.setItem("assessmentPopup", "false");
+    
+    const route = `/quiz?assessmentType=${currentAssessment}`;
+    navigate(route, {
+      state: {
+        assessmentData,
+        returnPath: location.pathname,
+      },
+    });
+  };
+  const clearChatData = () => {
+    localStorage.removeItem("currentMessages");
+    localStorage.removeItem("curriculum");
+    localStorage.removeItem("currentChatId");
+    localStorage.removeItem("assessmentData");
   };
 
-  // ---------------- Render Chat Message ----------------
-  const renderMessage = (message) => (
-    <div
-      key={message.id}
-      className={`mb-4 ${message.type === "bot" ? "mr-8 md:mr-12" : "ml-8 md:ml-12"}`}
-    >
-      <div
-        className={`rounded-2xl p-3 md:p-4 ${
-          message.type === "bot" ? "bg-white shadow-sm" : "bg-gray-500 text-white-100"
-        }`}
-      >
-        <div>
-          <FormattedMessage content={message.content} />
-        </div>
-        {message.showControls && (
-          <div className="mt-4 flex gap-4">
-            <button
-              onClick={handleNext}
-              disabled={isNextLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800"
-            >
-              {isNextLoading ? <CircularProgress size={20} color="white"/> : <ArrowRight />}
-              Next
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={isRedoLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-            >
-              {isRedoLoading ? <CircularProgress size={20}  color="white"/> : <RotateCcw /> }
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // ---------------- Render Component ----------------
   return (
     <div className="md:flex sm:flex-grow h-screen bg-slate-10 font-lato">
+      {/* Mobile menu button */}
       <button
-        onClick={toggleMobileMenu}
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         className="md:hidden fixed top-4 right-4 z-50 p-2 bg-gray-900 text-white rounded-lg"
       >
         {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
-      {/* Sidebar with Chat History */}
+      {/* Chat history sidebar */}
       <div
         className={`${
           isMobileMenuOpen ? "fixed inset-0 z-40" : "hidden"
-        } md:relative md:flex md:w-64 bg-gray-900 p-4 flex-col transition-all duration-300 ease-in-out`}
+        } md:relative md:flex md:w-64 bg-gray-900 p-4 flex-col`}
       >
-        <div className="mb-4">
-          <div className="flex items-center gap-2 text-white mb-2">
-            <MessageCircle size={24} />
-            <span className="text-lg font-semibold">Chat Assistant</span>
-          </div>
-        </div>
         <button
-          onClick={() => {
-            createNewChat();
-            setIsMobileMenuOpen(false);
-          }}
+          onClick={createNewChat}
           className="text-white bg-black rounded-lg p-3 flex items-center gap-2 w-full hover:bg-black transition-colors mb-4"
         >
           <MessageCircle size={20} />
           <span>New Chat</span>
         </button>
-        <div className="flex-1 overflow-y-auto -mx-4 px-4">
-          <div className="space-y-2">
-            {chatHistory.map((chat) => (
-              <div
-                key={chat.id}
-                onClick={() => loadChat(chat.id)}
-                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer ${
-                  currentChatId === chat.id
-                    ? "bg-gray-700 text-white"
-                    : "text-gray-300 hover:bg-gray-800"
-                }`}
+
+        <div className="flex-1 overflow-y-auto">
+          {chatHistory.map((chat) => (
+            <div
+              key={chat.id}
+              className="flex items-center justify-between p-2 text-gray-300 hover:bg-gray-800 rounded-lg"
+            >
+              <span className="truncate">{chat.title}</span>
+              <button
+                onClick={() => {
+                  setChatHistory((prev) =>
+                    prev.filter((c) => c.id !== chat.id)
+                  );
+                }}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <MessageCircle size={16} />
-                  <span className="truncate">{chat.title}</span>
-                </div>
-                <button onClick={(e) => deleteChat(chat.id, e)} className="p-1 hover:text-red-500">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Main Chat Area */}
+      {/* Main chat area */}
       <div className="flex-1 flex flex-col">
-        <div className="flex-1 sm:overflow-y-auto sm:px-2 md:px-4 py-6 md:py-8">
+        <div className="flex-1 overflow-y-auto px-4 py-8">
           <div className="max-w-3xl mx-auto">
-            {messages.map(renderMessage)}
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`mb-4 ${message.type === "bot" ? "mr-8" : "ml-8"}`}
+              >
+                <div
+                  className={`rounded-2xl p-4 ${
+                    message.type === "bot"
+                      ? "bg-white shadow-sm"
+                      : "bg-gray-500 text-white"
+                  }`}
+                >
+                  <FormattedMessage content={message.content} />
+                  {message.showControls && (
+                    <button
+                      onClick={handleNext}
+                      disabled={isNextLoading} // Optionally disable the button while loading
+                      className="mt-4 flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800"
+                    >
+                      {isNextLoading ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : (
+                        <>
+                          {curriculum.hasStarted ? "Next" : "Get Started"}
+                          <ArrowRight />
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
             {isLoading && (
-              <div className="mb-4 mr-8 md:mr-12">
-                <div className="rounded-2xl p-3 md:p-4 bg-white shadow-sm">
-                  <span className="text-gray-600">Thinking...</span>
+              <div className="mb-4 mr-8">
+                <div className="rounded-2xl p-4 bg-white shadow-sm">
+                  <CircularProgress size={20} />
                 </div>
               </div>
             )}
@@ -658,32 +597,30 @@ Focus on industry relevance and comprehensive learning`;
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="sm:sticky sm:bottom-0 border-t bg-white p-2 md:p-4">
+        {/* Input area */}
+        <div className="border-t bg-white p-4">
           <div className="max-w-3xl mx-auto relative">
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={handleInputFocus}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="Type your message..."
-              className="w-full p-3 md:p-4 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 text-sm md:text-base"
+              className="w-full p-4 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:border-gray-900"
               disabled={isLoading}
             />
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-blue-600 disabled:opacity-50"
             >
               <Send size={20} />
             </button>
           </div>
         </div>
       </div>
-
-      {/* Assessment Popup Modal */}
+      {/* Assessment popup */}
       {assessmentPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full">
@@ -695,7 +632,8 @@ Focus on industry relevance and comprehensive learning`;
                 : "Project Available!"}
             </h2>
             <p className="mb-4">
-              You have completed enough topics to start the {assessmentPopup}. Click below to proceed.
+              You have completed enough topics to start the {assessmentPopup}.
+              Click below to proceed.
             </p>
             <div className="flex justify-end">
               <button
@@ -709,13 +647,15 @@ Focus on industry relevance and comprehensive learning`;
         </div>
       )}
 
-      {/* Off-topic New Chat Modal */}
+      {/* New chat popup for off-topic questions */}
       {newChatPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full">
             <h2 className="text-xl font-bold mb-4">New Subject Detected</h2>
             <p className="mb-4">
-              Your question: <em>"{newChatPopup.question}"</em> appears to be on a different subject. Would you like to start a new chat for this subject?
+              Your question: <em>"{newChatPopup.question}"</em> appears to be on
+              a different subject. Would you like to start a new chat for this
+              subject?
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -725,7 +665,12 @@ Focus on industry relevance and comprehensive learning`;
                 Cancel
               </button>
               <button
-                onClick={confirmNewChat}
+                onClick={() => {
+                  createNewChat();
+                  setInput(newChatPopup.question);
+                  setNewChatPopup(null);
+                  handleSend();
+                }}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
                 Start New Chat

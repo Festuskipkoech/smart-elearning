@@ -125,7 +125,7 @@ const MainComponent = () => {
             real-time.
           </p>
           <div className="hero-buttons">
-            <button className="btn btn-primary btn-large">
+            <button className="btn btn-primary btn-large" onClick={openChatbot}>
               Start Learning Now
               <ArrowRight className="btn-icon" />
             </button>
@@ -217,7 +217,7 @@ const MainComponent = () => {
             </div>
           </div>
           <div className="footer-bottom">
-            <p>&copy; 2025 EduAI. All rights reserved.</p>
+            <p>&copy; 2025 JengaAI. All rights reserved.</p>
           </div>
         </div>
       </footer>

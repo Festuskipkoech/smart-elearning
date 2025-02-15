@@ -7,7 +7,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle,Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { API_KEY } from "../api";
 import { FormattedMessage } from "./format";
@@ -224,6 +224,19 @@ export default function Quiz() {
     return storedCurriculum ? JSON.parse(storedCurriculum) : null;
   };
 
+
+  useEffect(() => {
+    // Clear assessment popup state in localStorage when component mounts
+    localStorage.setItem("assessmentPopup", "false");
+    
+    // Cleanup when component unmounts
+    return () => {
+      localStorage.setItem("assessmentPopup", "false");
+      localStorage.setItem("assessmentCompleted", "true");
+    };
+  }, []);
+
+
   // Generate assessment based on the current tab
   const generateAssessment = async () => {
     setLoading(true);
@@ -243,19 +256,33 @@ export default function Quiz() {
 
     let prompt = "";
 
-    switch (currentTab) {
-      case "quiz":
-        prompt = `Create a multiple choice quiz with 5 questions covering these topics: ${completedTopics.join(", ")}.
-Format each question like this:
-Q1. Question text
-a) Option 1
-b) Option 2 (correct)
-c) Option 3
-d) Option 4
-Explanation: Explanation text
-
-Continue for all 5 questions.`;
-        break;
+    switch (currentTab) {case "quiz":
+      // Gather subtopics that have been covered so far:
+      let coveredSubtopics = [];
+      currentProgress.topics.forEach((topic, idx) => {
+        if (idx < currentProgress.currentTopicIndex) {
+          // All subtopics from topics that are fully completed:
+          coveredSubtopics.push(...currentProgress.subtopics[topic]);
+        } else if (idx === currentProgress.currentTopicIndex) {
+          // Only include subtopics up to the current subtopic index (inclusive)
+          coveredSubtopics.push(...currentProgress.subtopics[topic].slice(0, currentProgress.currentSubtopicIndex + 1));
+        }
+      });
+      // Remove any falsy values (if any)
+      coveredSubtopics = coveredSubtopics.filter(Boolean);
+    
+      prompt = `Create a multiple choice quiz with 5 questions covering these subtopics: ${coveredSubtopics.join(", ")}.
+    Format each question like this:
+    Q1. Question text
+    a) Option 1
+    b) Option 2 (correct)
+    c) Option 3
+    d) Option 4
+    Explanation: Explanation text
+    
+    Continue for all 5 questions.`;
+      break;
+    
       case "exercise":
         prompt = `Create 3 real world problem-practical exercises based on ${completedTopics.join(", ")}.
 Format each exercise like this:
@@ -435,6 +462,8 @@ Provide a detailed explanation, mark out of 100, and a full correct solution.`;
       ).length;
       setScore((correctAnswers / totalQuestions) * 100);
       setIsSubmitted(true);
+      localStorage.setItem("assessmentSubmitted", "true");
+
 
     } else if (currentTab === "exercise") {
       setExcersiseLoading(true);
@@ -447,6 +476,7 @@ Provide a detailed explanation, mark out of 100, and a full correct solution.`;
       localStorage.setItem("exercisesTaken", "true");
       setIsSubmitted(true);
       setExcersiseLoading(false)
+      
     } else if (currentTab === "project") {
       setProjectLoading(true)
 
